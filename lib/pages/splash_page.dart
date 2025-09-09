@@ -10,6 +10,7 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
+  bool _navigated = false;
   @override
   void initState() {
     super.initState();
@@ -17,9 +18,16 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   Future<void> _boot() async {
-    await Future.delayed(const Duration(milliseconds: 10000));
+    // Shorter splash delay to avoid late redirects during development/hot-restart
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (!mounted) return;
+    // Only navigate if Splash is still the current/top route and we haven't navigated before
+    final isCurrent = ModalRoute.of(context)?.isCurrent == true;
+    if (!isCurrent || _navigated) return;
+
     final loggedIn = await LocalStorageService.instance.isLoggedIn();
     if (!mounted) return;
+    _navigated = true;
     if (loggedIn) {
       Navigator.of(context).pushReplacementNamed('/home');
     } else {
@@ -36,7 +44,7 @@ class _SplashPageState extends State<SplashPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Ionicons.fitness_sharp, color: Colors.black, size: 56),
+              const Icon(Ionicons.fitness_sharp, color: Colors.black, size: 80),
               const SizedBox(height: 12),
               const Text(
                 'Fitzz',

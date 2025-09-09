@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fitzz/services/storage_service.dart';
 import 'package:fitzz/utils/daily_challenge.dart';
+import 'package:fitzz/widgets/app_drawer.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -78,15 +79,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _logout() async {
-    await LocalStorageService.instance.setLoggedIn(false);
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final completed = _done.where((e) => e).length;
+    final total = _challenges.length;
+    final progress = total == 0 ? 0.0 : completed / total;
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -95,25 +93,33 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Fitzz'),
+        title: const Text('Home'),
         actions: [
-          IconButton(onPressed: _logout, icon: const Icon(Icons.logout))
+          IconButton(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/profile'),
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Profile',
+          ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: Container(
         color: const Color(0xFFF0F0F0),
         width: double.infinity,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _headerStrike(theme),
+            _headerStrike(theme, progress, completed, total),
             const SizedBox(height: 8),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: _challenges.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, i) => _challengeItem(i),
+              child: NotificationListener<OverscrollIndicatorNotification>(
+                onNotification: (o) { o.disallowIndicator(); return true; },
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _challenges.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, i) => _challengeItem(i),
+                ),
               ),
             ),
             SafeArea(
@@ -128,7 +134,7 @@ class _HomePageState extends State<HomePage> {
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: _finishToday,
+                    onPressed: completed > 0 ? _finishToday : null,
                     child: const Text('Selesai Hari Ini'),
                   ),
                 ),
@@ -140,10 +146,16 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _headerStrike(ThemeData theme) {
+  Widget _headerStrike(ThemeData theme, double progress, int completed, int total) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(bottomLeft: Radius.circular(24), bottomRight: Radius.circular(24))),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -157,6 +169,18 @@ class _HomePageState extends State<HomePage> {
               Text('Strike $_strike hari!', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             ],
           ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: progress.clamp(0.0, 1.0),
+              backgroundColor: const Color(0xFFE6E6E6),
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Selesai $completed dari $total challenge', style: theme.textTheme.bodySmall),
         ],
       ),
     );
