@@ -1,32 +1,51 @@
 import 'dart:math';
 
+class ChallengeType {
+  final String name; // e.g., 'Push-up'
+  final int base; // base reps/seconds at level 1
+  final int perLevel; // increment per level
+  final bool isDuration; // true => seconds, false => reps
+  const ChallengeType(this.name, this.base, this.perLevel, {this.isDuration = false});
+
+  String format(int level) {
+    int value = base + perLevel * (level - 1);
+    if (isDuration) {
+      return '$name $value detik';
+    }
+    return '$name ${value}x';
+  }
+}
+
 class DailyChallengeGenerator {
-  static final List<String> _pool = [
-    'Push Up 10x',
-    'Push Up 20x',
-    'Push Up 30x',
-    'Squat 20x',
-    'Squat 30x',
-    'Plank 60 detik',
-    'Plank 90 detik',
-    'Lari 5 menit',
-    'Lari 10 menit',
-    'Jalan cepat 15 menit',
-    'Lompat tali 100x',
-    'Wall Sit 60 detik',
-    'Burpees 15x',
-    'Mountain Climber 40x',
+  // Derived from your table (approx):
+  static const List<ChallengeType> types = [
+    ChallengeType('Push-up', 10, 3),
+    ChallengeType('Sit-up', 15, 3),
+    ChallengeType('Squat', 15, 3),
+    ChallengeType('Lunge / kaki', 10, 2),
+    ChallengeType('Burpee', 5, 2),
+    ChallengeType('Dip (kursi)', 8, 2),
+    ChallengeType('Jumping Jack', 30, 10, isDuration: true),
+    ChallengeType('High Knees', 20, 10, isDuration: true),
+    ChallengeType('Plank', 20, 5, isDuration: true),
+    ChallengeType('Wall Sit', 20, 5, isDuration: true),
+    ChallengeType('Mountain Climber', 15, 5, isDuration: true),
+    ChallengeType('Jump Squat', 8, 2),
   ];
 
-  /// Deterministic pick of 3 challenges based on yyyy-MM-dd
-  static List<String> generateForDate(String yyyymmdd) {
-    // Simple hash of date to seed Random
-    int seed = yyyymmdd.codeUnits.fold<int>(0, (p, c) => (p * 31 + c) & 0x7fffffff);
-    final rand = Random(seed);
-    final indices = <int>{};
-    while (indices.length < 3 && indices.length < _pool.length) {
-      indices.add(rand.nextInt(_pool.length));
+  static int _seedFrom(String a, int b) {
+    final s = '$a#$b';
+    return s.codeUnits.fold<int>(0, (p, c) => (p * 131 + c) & 0x7fffffff);
+  }
+
+  /// Deterministic pick of 3 challenges based on date and current level.
+  /// If level goes up/down, the output becomes harder/easier automatically.
+  static List<String> generateForDateLevel(String yyyymmdd, int level) {
+    final rand = Random(_seedFrom(yyyymmdd, level));
+    final idx = <int>{};
+    while (idx.length < 3 && idx.length < types.length) {
+      idx.add(rand.nextInt(types.length));
     }
-    return indices.map((i) => _pool[i]).toList();
+    return idx.map((i) => types[i].format(level)).toList();
   }
 }

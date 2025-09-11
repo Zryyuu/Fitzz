@@ -51,11 +51,10 @@ class AppDrawer extends StatelessWidget {
               title: const Text('Library Gerakan'),
               onTap: () => _go(context, '/library'),
             ),
-            const Spacer(),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Profile & Settings'),
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Profile'),
               onTap: () => _go(context, '/profile'),
             ),
           ],
