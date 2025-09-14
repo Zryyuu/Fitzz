@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fitzz/services/storage_service.dart';
 import 'package:intl/intl.dart';
-import 'package:fitzz/widgets/app_drawer.dart';
+// import 'package:fitzz/widgets/app_drawer.dart';
+import 'package:fitzz/widgets/bottom_nav.dart';
 
 class ProgressPage extends StatefulWidget {
   const ProgressPage({super.key});
@@ -53,10 +54,14 @@ class _ProgressPageState extends State<ProgressPage> {
           ),
         ],
       ),
-      drawer: const AppDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      // Drawer removed. Use bottom navigation instead.
+      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
@@ -120,7 +125,9 @@ class _ProgressPageState extends State<ProgressPage> {
               ],
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

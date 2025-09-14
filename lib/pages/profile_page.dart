@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fitzz/services/storage_service.dart';
-import 'package:fitzz/widgets/app_drawer.dart';
+// import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 
@@ -101,17 +101,47 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 12),
                   Center(
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final picker = ImagePicker();
-                        final f = await picker.pickImage(source: ImageSource.gallery, maxWidth: 600, imageQuality: 85);
-                        if (f == null) return;
-                        final b64 = base64Encode(await f.readAsBytes());
-                        setLocal(() => tempAvatar = b64);
-                      },
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Ganti Foto'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final picker = ImagePicker();
+                            final f = await picker.pickImage(source: ImageSource.gallery, maxWidth: 600, imageQuality: 85);
+                            if (f == null) return;
+                            final b64 = base64Encode(await f.readAsBytes());
+                            setLocal(() => tempAvatar = b64);
+                          },
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Ganti Foto'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final ok = await showDialog<bool>(
+                              context: ctx,
+                              builder: (dCtx) => AlertDialog(
+                                title: const Text('Hapus Foto Profil'),
+                                content: const Text('Apakah kamu yakin ingin menghapus foto profil?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Batal')),
+                                  ElevatedButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Hapus')),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              setLocal(() => tempAvatar = null);
+                            }
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Hapus Foto'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -161,8 +191,27 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _logout() async {
     await LocalStorageService.instance.setLoggedIn(false);
+    await LocalStorageService.instance.setActiveEmail(null);
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    }
+  }
+  
+  Future<void> _confirmLogout() async {
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Logout'),
+        content: const Text('Apakah kamu yakin ingin keluar dari akun?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Logout')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _logout();
     }
   }
   
@@ -266,10 +315,13 @@ class _ProfilePageState extends State<ProfilePage> {
         foregroundColor: Colors.white,
         title: const Text('Profile'),
       ),
-      drawer: const AppDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      // Drawer removed; profile accessible via AppBar avatar.
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -277,21 +329,24 @@ class _ProfilePageState extends State<ProfilePage> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
             ),
-            child: Row(
-              children: [
-                GestureDetector(onTap: _showPreviewDialog, child: _avatarPreview()),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_displayName?.isNotEmpty == true ? _displayName! : 'Guest User',
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                    ],
+            child: InkWell(
+              onTap: _showPreviewDialog,
+              borderRadius: BorderRadius.circular(16),
+              child: Row(
+                children: [
+                  _avatarPreview(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_displayName?.isNotEmpty == true ? _displayName! : 'Guest User',
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(onPressed: _showEditDialog, icon: const Icon(Icons.edit), tooltip: 'Edit Profil')
-              ],
+                ],
+              ),
             ),
           ),
           // Hapus kartu 'Ganti Foto Profil' karena edit dipindah ke popup
@@ -368,12 +423,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.logout),
                   title: const Text('Logout'),
-                  onTap: _logout,
+                  onTap: _confirmLogout,
                 )
               ],
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

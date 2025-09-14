@@ -4,7 +4,9 @@ import 'package:intl/intl.dart';
 import 'package:fitzz/services/storage_service.dart';
 import 'package:fitzz/utils/daily_challenge.dart';
 import 'package:fitzz/utils/motivations.dart';
-import 'package:fitzz/widgets/app_drawer.dart';
+// import 'package:fitzz/widgets/app_drawer.dart';
+import 'package:fitzz/widgets/bottom_nav.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -47,8 +49,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   // Avatar with badge ring helper
   Widget _buildAvatarWithRing({double radius = 20}) {
-    final ringColor = _ringColorForBadge(_selectedBadge);
     final imageProvider = (_avatarBase64 == null) ? null : MemoryImage(base64Decode(_avatarBase64!));
+    // If no badge is selected, show plain avatar without ring.
+    if (_selectedBadge == null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.white,
+        backgroundImage: imageProvider,
+        child: imageProvider == null ? const Icon(Icons.person, color: Colors.black) : null,
+      );
+    }
+
+    // Otherwise, show ring and subtle glow according to badge color.
+    final ringColor = _ringColorForBadge(_selectedBadge);
     return AnimatedBuilder(
       animation: _glowCtrl,
       builder: (_, __) {
@@ -60,11 +73,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: ringColor, width: 3),
-            boxShadow: _selectedBadge == null
-                ? null
-                : [
-                    BoxShadow(color: ringColor.withValues(alpha: 0.5), blurRadius: blur, spreadRadius: spread),
-                  ],
+            boxShadow: [
+              BoxShadow(color: ringColor.withValues(alpha: 0.5), blurRadius: blur, spreadRadius: spread),
+            ],
           ),
           child: CircleAvatar(
             radius: radius,
@@ -391,11 +402,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
         ],
       ),
-      drawer: const AppDrawer(),
+      // Drawer removed: bottom navigation is used instead
+      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
       body: Container(
         color: const Color(0xFFF0F0F0),
         width: double.infinity,
-        child: Column(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _headerSection(theme, xpProgress, level, xpWithinLevel, nextXp - baseXp),
@@ -416,7 +431,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, i) => _challengeItem(i),
                         )
-                      : _revealPlaceholder(theme, progress, completedDaily, 3),
+                      : ListView(
+                          children: [
+                            _revealPlaceholder(theme, progress, completedDaily, 3),
+                          ],
+                        ),
                 ),
               ),
             ),
@@ -445,6 +464,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ),
             )
           ],
+            ),
+          ),
         ),
       ),
     );
@@ -504,18 +525,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _statItem(Icons.local_fire_department_outlined, 'Strike tertinggi', '$_bestStrike Hari'),
-          _statItem(Icons.check_circle_outline, 'Workout selesai', '$_totalWorkouts Kali'),
-          _statItem(Icons.stars_outlined, 'Total XP', '$_totalXp XP'),
+          _statItem(const Icon(Icons.local_fire_department_outlined, color: Colors.black), 'Strike tertinggi', '$_bestStrike Hari'),
+          _statItem(const Icon(Icons.check_circle_outline, color: Colors.black), 'Workout selesai', '$_totalWorkouts Kali'),
+          _statItem(const Icon(Symbols.stars, fill: 0, weight: 400, grade: 0, opticalSize: 24, color: Colors.black), 'Total XP', '$_totalXp XP'),
         ],
       ),
     );
   }
 
-  Widget _statItem(IconData icon, String title, String value) {
+  Widget _statItem(Widget icon, String title, String value) {
     return Row(
       children: [
-        Icon(icon, color: Colors.black),
+        icon,
         const SizedBox(width: 8),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,

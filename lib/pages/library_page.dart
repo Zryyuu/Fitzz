@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:fitzz/widgets/app_drawer.dart';
+// import 'package:fitzz/widgets/app_drawer.dart';
+import 'package:fitzz/widgets/bottom_nav.dart';
 
 class LibraryPage extends StatelessWidget {
   const LibraryPage({super.key});
@@ -25,35 +26,40 @@ class LibraryPage extends StatelessWidget {
           ),
         ],
       ),
-      drawer: const AppDrawer(),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) {
-          final a = items[i];
-          return Container(
+      bottomNavigationBar: const AppBottomNav(currentIndex: 3),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.fitness_center_outlined),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(a['title']!, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text(a['desc']!, style: theme.textTheme.bodySmall),
-                    ],
-                  ),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (_, i) {
+              final a = items[i];
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.fitness_center_outlined),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(a['title']!, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text(a['desc']!, style: theme.textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }

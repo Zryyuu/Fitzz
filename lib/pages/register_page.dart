@@ -22,10 +22,26 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    await LocalStorageService.instance.setLoggedIn(true);
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/home');
+    try {
+      await Future.delayed(const Duration(milliseconds: 400));
+      final email = _emailCtrl.text.trim().toLowerCase();
+      final pass = _passCtrl.text;
+      final name = _nameCtrl.text.trim();
+      final storage = LocalStorageService.instance;
+      final exists = await storage.isUserRegistered(email);
+      if (exists) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email sudah terdaftar, silakan login')));
+        Navigator.of(context).pushReplacementNamed('/login');
+        return;
+      }
+      await storage.registerUser(email: email, password: pass, displayName: name);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registrasi berhasil. Silakan login')));
+      Navigator.of(context).pushReplacementNamed('/login');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override

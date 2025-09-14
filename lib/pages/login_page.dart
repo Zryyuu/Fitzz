@@ -19,10 +19,24 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 500));
-    await LocalStorageService.instance.setLoggedIn(true);
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/home');
+    try {
+      await Future.delayed(const Duration(milliseconds: 300));
+      final email = _emailCtrl.text.trim().toLowerCase();
+      final pass = _passCtrl.text;
+      final storage = LocalStorageService.instance;
+      final ok = await storage.validateCredentials(email: email, password: pass);
+      if (!ok) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email atau password salah')));
+        return;
+      }
+      await storage.setActiveEmail(email);
+      await storage.setLoggedIn(true);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/home');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override

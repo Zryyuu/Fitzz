@@ -26,9 +26,10 @@ class _SplashPageState extends State<SplashPage> {
     if (!isCurrent || _navigated) return;
 
     final loggedIn = await LocalStorageService.instance.isLoggedIn();
+    final activeEmail = await LocalStorageService.instance.getActiveEmail();
     if (!mounted) return;
     _navigated = true;
-    if (loggedIn) {
+    if (loggedIn && (activeEmail != null && activeEmail.isNotEmpty)) {
       Navigator.of(context).pushReplacementNamed('/home');
     } else {
       Navigator.of(context).pushReplacementNamed('/login');
