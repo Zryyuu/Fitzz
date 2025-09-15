@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:fitzz/pages/home_page.dart';
-import 'package:fitzz/pages/progress_page.dart';
-import 'package:fitzz/pages/achievements_page.dart';
-import 'package:fitzz/pages/library_page.dart';
+import 'package:fitzz/pages/tab_shell.dart';
 
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({super.key, required this.currentIndex});
@@ -11,27 +8,10 @@ class AppBottomNav extends StatelessWidget {
 
   void _go(BuildContext context, int index) {
     if (index == currentIndex) return;
-    Widget page;
-    switch (index) {
-      case 0:
-        page = const HomePage();
-        break;
-      case 1:
-        page = const ProgressPage();
-        break;
-      case 2:
-        page = const AchievementsPage();
-        break;
-      case 3:
-      default:
-        page = const LibraryPage();
-        break;
-    }
-
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => page,
+        pageBuilder: (context, animation, secondaryAnimation) => TabShell(initialIndex: index),
         transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,

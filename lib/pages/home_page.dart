@@ -9,7 +9,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:fitzz/widgets/profile_avatar_button.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.withBottomNav = true});
+
+  final bool withBottomNav;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -27,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   String? _lastCompletedDate;
   int _extraAdded = 0; // how many extra challenges added today
   bool _todayConfirmed = false; // whether user confirmed completion today
+  bool _ready = false; // render only after async init completes to avoid flicker
 
   @override
   void initState() {
@@ -94,6 +97,7 @@ class _HomePageState extends State<HomePage> {
       _lastCompletedDate = last;
       _extraAdded = extraAdded;
       _todayConfirmed = last == _todayKey; // if already confirmed today
+      _ready = true; // now safe to render full UI
     });
   }
 
@@ -294,6 +298,22 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Avoid showing initial default values briefly while async init loads real data
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Home'),
+          actions: const [
+            ProfileAvatarButton(radius: 18),
+          ],
+        ),
+        bottomNavigationBar: const AppBottomNav(currentIndex: 0),
+        body: const SizedBox.expand(),
+      );
+    }
     final theme = Theme.of(context);
     final completedDaily = _done.take(3).where((e) => e).length;
     final progress = 3 == 0 ? 0.0 : completedDaily / 3;
@@ -324,7 +344,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       // Drawer removed: bottom navigation is used instead
-      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
+      bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 0) : null,
       body: Container(
         color: const Color(0xFFF0F0F0),
         width: double.infinity,
@@ -543,10 +563,30 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           subtitle: Text(i < 3 ? 'Challenge Harian' : 'Challenge Tambahan', style: const TextStyle(fontSize: 12)),
+          // Tampilkan XP yang didapat per challenge di sisi kanan
+          secondary: _xpChip(i),
           controlAffinity: ListTileControlAffinity.leading,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
+    );
+  }
+  
+  // Badge kecil untuk menampilkan XP yang didapat dari challenge tersebut
+  Widget _xpChip(int i) {
+    final xp = _xpForChallenge(_challenges[i]);
+    return Chip(
+      label: Text('+$xp XP'),
+      backgroundColor: const Color(0xFFEFEFEF),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      side: BorderSide.none,
+      labelStyle: const TextStyle(
+        color: Colors.black,
+        fontWeight: FontWeight.w600,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
     );
   }
 }

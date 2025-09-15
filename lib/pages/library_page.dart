@@ -3,8 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:fitzz/widgets/profile_avatar_button.dart';
 
-class LibraryPage extends StatelessWidget {
-  const LibraryPage({super.key});
+class LibraryPage extends StatefulWidget {
+  const LibraryPage({super.key, this.withBottomNav = true});
+
+  final bool withBottomNav;
+
+  @override
+  State<LibraryPage> createState() => _LibraryPageState();
+}
+
+class _LibraryPageState extends State<LibraryPage> {
+  bool _ready = false; // keep consistent UX with other tabs
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (!mounted) return;
+      setState(() => _ready = true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +32,22 @@ class LibraryPage extends StatelessWidget {
       {'title': 'Squat', 'desc': 'Latihan kaki dan glute, jaga punggung tetap netral.'},
       {'title': 'Plank', 'desc': 'Stabilitas core dengan menahan posisi plank.'},
     ];
+
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Library Gerakan'),
+          actions: const [
+            ProfileAvatarButton(radius: 18),
+          ],
+        ),
+        bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 3) : null,
+        body: const SizedBox.expand(),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -25,7 +59,7 @@ class LibraryPage extends StatelessWidget {
           ProfileAvatarButton(radius: 18),
         ],
       ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 3),
+      bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 3) : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),

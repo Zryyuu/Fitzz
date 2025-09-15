@@ -232,7 +232,7 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 8),
             TextField(controller: passNewCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Password baru')),
             const SizedBox(height: 8),
-            TextField(controller: passConfCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Konfirmasi password')),
+            TextField(controller: passConfCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Konfirmasi password baru')),
           ],
         ),
         actions: [
@@ -243,15 +243,23 @@ class _ProfilePageState extends State<ProfilePage> {
     );
     if (ok != true) return;
     if (!mounted) return;
-    if ((currentSaved ?? '') != (passOldCtrl.text)) {
+    final oldPass = passOldCtrl.text.trim();
+    final newPass = passNewCtrl.text.trim();
+    final confPass = passConfCtrl.text.trim();
+
+    if ((currentSaved ?? '') != oldPass) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password sekarang salah')));
       return;
     }
-    if (passNewCtrl.text.isEmpty || passNewCtrl.text != passConfCtrl.text) {
+    if (newPass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password baru minimal 6 karakter')));
+      return;
+    }
+    if (newPass != confPass) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konfirmasi password tidak cocok')));
       return;
     }
-    await LocalStorageService.instance.setPassword(passNewCtrl.text);
+    await LocalStorageService.instance.setPassword(newPass);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password berhasil diubah')));
   }

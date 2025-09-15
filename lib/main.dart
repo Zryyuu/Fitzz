@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fitzz/pages/splash_page.dart';
 import 'package:fitzz/pages/login_page.dart';
 import 'package:fitzz/pages/register_page.dart';
-import 'package:fitzz/pages/home_page.dart';
+import 'package:fitzz/pages/tab_shell.dart';
 import 'package:fitzz/pages/progress_page.dart';
 import 'package:fitzz/pages/achievements_page.dart';
 import 'package:fitzz/pages/library_page.dart';
@@ -70,7 +70,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (_) => const LoginPage(),
         '/register': (_) => const RegisterPage(),
-        '/home': (_) => const HomePage(),
+        // Use TabShell as the main tabbed experience so pages persist
+        '/home': (_) => const TabShell(initialIndex: 0),
         '/progress': (_) => const ProgressPage(),
         '/achievements': (_) => const AchievementsPage(),
         '/library': (_) => const LibraryPage(),

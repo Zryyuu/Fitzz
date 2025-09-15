@@ -3,8 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:fitzz/widgets/profile_avatar_button.dart';
 
-class AchievementsPage extends StatelessWidget {
-  const AchievementsPage({super.key});
+class AchievementsPage extends StatefulWidget {
+  const AchievementsPage({super.key, this.withBottomNav = true});
+
+  final bool withBottomNav;
+
+  @override
+  State<AchievementsPage> createState() => _AchievementsPageState();
+}
+
+class _AchievementsPageState extends State<AchievementsPage> {
+  bool _ready = false; // keep UX consistent with other tabs
+
+  @override
+  void initState() {
+    super.initState();
+    // No async data yet, but delay one microtask to match ready pattern and avoid flicker
+    Future.microtask(() {
+      if (!mounted) return;
+      setState(() => _ready = true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +33,22 @@ class AchievementsPage extends StatelessWidget {
       {'title': 'Strike 30 Hari', 'desc': 'Selesaikan challenge 30 hari berturut-turut'},
       {'title': 'Early Bird', 'desc': 'Selesaikan challenge sebelum jam 7 pagi'},
     ];
+
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Achievements'),
+          actions: const [
+            ProfileAvatarButton(radius: 18),
+          ],
+        ),
+        bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 2) : null,
+        body: const SizedBox.expand(),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -26,7 +61,7 @@ class AchievementsPage extends StatelessWidget {
         ],
       ),
       // Drawer removed: using bottom navigation
-      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+      bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 2) : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),

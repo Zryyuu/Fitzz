@@ -6,7 +6,9 @@ import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:fitzz/widgets/profile_avatar_button.dart';
 
 class ProgressPage extends StatefulWidget {
-  const ProgressPage({super.key});
+  const ProgressPage({super.key, this.withBottomNav = true});
+
+  final bool withBottomNav;
 
   @override
   State<ProgressPage> createState() => _ProgressPageState();
@@ -15,6 +17,7 @@ class ProgressPage extends StatefulWidget {
 class _ProgressPageState extends State<ProgressPage> {
   int _strike = 0;
   String _lastDate = '';
+  bool _ready = false; // prevent flicker until async init completes
 
   @override
   void initState() {
@@ -30,11 +33,28 @@ class _ProgressPageState extends State<ProgressPage> {
     setState(() {
       _strike = strike;
       _lastDate = last;
+      _ready = true;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Skeleton while waiting to avoid initial default flash
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Progress'),
+          actions: const [
+            ProfileAvatarButton(radius: 18),
+          ],
+        ),
+        bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 1) : null,
+        body: const SizedBox.expand(),
+      );
+    }
     final theme = Theme.of(context);
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -49,7 +69,7 @@ class _ProgressPageState extends State<ProgressPage> {
         ],
       ),
       // Drawer removed. Use bottom navigation instead.
-      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
+      bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 1) : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
