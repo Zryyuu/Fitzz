@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:fitzz/pages/home_page.dart';
+import 'package:fitzz/pages/progress_page.dart';
+import 'package:fitzz/pages/achievements_page.dart';
+import 'package:fitzz/pages/library_page.dart';
 
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({super.key, required this.currentIndex});
@@ -7,20 +11,32 @@ class AppBottomNav extends StatelessWidget {
 
   void _go(BuildContext context, int index) {
     if (index == currentIndex) return;
+    Widget page;
     switch (index) {
       case 0:
-        Navigator.pushReplacementNamed(context, '/home');
+        page = const HomePage();
         break;
       case 1:
-        Navigator.pushReplacementNamed(context, '/progress');
+        page = const ProgressPage();
         break;
       case 2:
-        Navigator.pushReplacementNamed(context, '/achievements');
+        page = const AchievementsPage();
         break;
       case 3:
-        Navigator.pushReplacementNamed(context, '/library');
+      default:
+        page = const LibraryPage();
         break;
     }
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
   }
 
   @override

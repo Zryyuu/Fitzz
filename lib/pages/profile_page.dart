@@ -314,6 +314,16 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('Profile'),
+        leading: BackButton(
+          onPressed: () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop();
+            } else {
+              nav.pushReplacementNamed('/home');
+            }
+          },
+        ),
       ),
       // Drawer removed; profile accessible via AppBar avatar.
       body: Center(
@@ -375,7 +385,7 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Cincin Badge Avatar', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Border Badge Avatar', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,

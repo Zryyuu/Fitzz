@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
+import 'package:fitzz/widgets/profile_avatar_button.dart';
 
 class AchievementsPage extends StatelessWidget {
   const AchievementsPage({super.key});
@@ -16,14 +17,12 @@ class AchievementsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('Achievements'),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/profile'),
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
+        actions: const [
+          ProfileAvatarButton(radius: 18),
         ],
       ),
       // Drawer removed: using bottom navigation
@@ -65,3 +64,4 @@ class AchievementsPage extends StatelessWidget {
     );
   }
 }
+

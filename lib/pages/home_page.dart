@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:fitzz/services/storage_service.dart';
 import 'package:fitzz/utils/daily_challenge.dart';
@@ -7,6 +6,7 @@ import 'package:fitzz/utils/motivations.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:fitzz/widgets/profile_avatar_button.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,99 +15,33 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage> {
   late String _todayKey;
   List<String> _challenges = const [];
   List<bool> _done = List<bool>.filled(3, false);
   int _strike = 0;
   int _bestStrike = 0;
-  bool _loading = true;
   bool _revealed = false;
   int _totalXp = 0;
   int _totalWorkouts = 0;
-  int? _selectedBadge;
-  String? _avatarBase64;
   String? _lastCompletedDate;
   int _extraAdded = 0; // how many extra challenges added today
   bool _todayConfirmed = false; // whether user confirmed completion today
-  late final AnimationController _glowCtrl;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _todayKey = DateFormat('yyyy-MM-dd').format(now);
-    _glowCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
     _init();
   }
 
   @override
   void dispose() {
-    _glowCtrl.dispose();
     super.dispose();
   }
 
-  // Avatar with badge ring helper
-  Widget _buildAvatarWithRing({double radius = 20}) {
-    final imageProvider = (_avatarBase64 == null) ? null : MemoryImage(base64Decode(_avatarBase64!));
-    // If no badge is selected, show plain avatar without ring.
-    if (_selectedBadge == null) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundColor: Colors.white,
-        backgroundImage: imageProvider,
-        child: imageProvider == null ? const Icon(Icons.person, color: Colors.black) : null,
-      );
-    }
-
-    // Otherwise, show ring and subtle glow according to badge color.
-    final ringColor = _ringColorForBadge(_selectedBadge);
-    return AnimatedBuilder(
-      animation: _glowCtrl,
-      builder: (_, __) {
-        final t = _glowCtrl.value; // 0..1
-        final blur = 4 + 6 * t;
-        final spread = 0.5 + 1.0 * t;
-        return Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: ringColor, width: 3),
-            boxShadow: [
-              BoxShadow(color: ringColor.withValues(alpha: 0.5), blurRadius: blur, spreadRadius: spread),
-            ],
-          ),
-          child: CircleAvatar(
-            radius: radius,
-            backgroundColor: Colors.white,
-            backgroundImage: imageProvider,
-            child: imageProvider == null ? const Icon(Icons.person, color: Colors.black) : null,
-          ),
-        );
-      },
-    );
-  }
-
-  Color _ringColorForBadge(int? level) {
-    if (level == null) return Colors.white;
-    // Map specific badge levels to ring colors
-    switch (level) {
-      case 10:
-        return const Color(0xFFB0BEC5); // steel grey
-      case 25:
-        return const Color(0xFF26C6DA); // cyan
-      case 45:
-        return const Color(0xFF66BB6A); // green
-      case 65:
-        return const Color(0xFFFFCA28); // amber
-      case 75:
-        return const Color(0xFFFF7043); // deep orange
-      case 100:
-        return const Color(0xFFAB47BC); // purple
-      default:
-        return Colors.black;
-    }
-  }
+  // Avatar visuals are now centralized via ProfileAvatarButton
 
   Future<void> _init() async {
     final storage = LocalStorageService.instance;
@@ -120,8 +54,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final totalWorkouts = await storage.getTotalWorkouts();
     final bestStrike = await storage.getBestStrike();
     final extraAdded = await storage.getExtraCount(_todayKey);
-    final selectedBadge = await storage.getSelectedBadgeLevel();
-    final avatar = await storage.getAvatarBase64();
 
     // Apply missed-day penalty once per day: if last completed is neither today nor yesterday
     final last = await storage.getLastCompletedDate();
@@ -159,12 +91,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _totalXp = totalXpAfter;
       _totalWorkouts = totalWorkouts;
       _bestStrike = bestStrike;
-      _selectedBadge = selectedBadge;
-      _avatarBase64 = avatar;
       _lastCompletedDate = last;
       _extraAdded = extraAdded;
       _todayConfirmed = last == _todayKey; // if already confirmed today
-      _loading = false;
     });
   }
 
@@ -368,9 +297,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final theme = Theme.of(context);
     final completedDaily = _done.take(3).where((e) => e).length;
     final progress = 3 == 0 ? 0.0 : completedDaily / 3;
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    // Removed loading spinner; render immediately
 
     final level = _levelFromXp(_totalXp);
     final baseXp = _baseXpForLevel(level);
@@ -388,18 +315,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('Home'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: InkWell(
-              onTap: () => Navigator.pushReplacementNamed(context, '/profile'),
-              borderRadius: BorderRadius.circular(24),
-              child: _buildAvatarWithRing(radius: 18),
-            ),
-          ),
+        actions: const [
+          ProfileAvatarButton(radius: 18),
         ],
       ),
       // Drawer removed: bottom navigation is used instead

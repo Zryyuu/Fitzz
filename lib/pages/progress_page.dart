@@ -3,6 +3,7 @@ import 'package:fitzz/services/storage_service.dart';
 import 'package:intl/intl.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
+import 'package:fitzz/widgets/profile_avatar_button.dart';
 
 class ProgressPage extends StatefulWidget {
   const ProgressPage({super.key});
@@ -12,7 +13,6 @@ class ProgressPage extends StatefulWidget {
 }
 
 class _ProgressPageState extends State<ProgressPage> {
-  bool _loading = true;
   int _strike = 0;
   String _lastDate = '';
 
@@ -30,28 +30,22 @@ class _ProgressPageState extends State<ProgressPage> {
     setState(() {
       _strike = strike;
       _lastDate = last;
-      _loading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
     final theme = Theme.of(context);
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('Progress'),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/profile'),
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
+        actions: const [
+          ProfileAvatarButton(radius: 18),
         ],
       ),
       // Drawer removed. Use bottom navigation instead.
