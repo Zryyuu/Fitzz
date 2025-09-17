@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:fitzz/services/storage_service.dart';
 import 'package:fitzz/utils/daily_challenge.dart';
@@ -30,6 +31,7 @@ class _HomePageState extends State<HomePage> {
   int _extraAdded = 0; // how many extra challenges added today
   bool _todayConfirmed = false; // whether user confirmed completion today
   bool _ready = false; // render only after async init completes to avoid flicker
+  Timer? _dateWatcher; // periodically check for date change while app is open
 
   @override
   void initState() {
@@ -37,14 +39,48 @@ class _HomePageState extends State<HomePage> {
     final now = DateTime.now();
     _todayKey = DateFormat('yyyy-MM-dd').format(now);
     _init();
+    // Listen for global data changes (e.g., after rewind) to refresh UI
+    final storage = LocalStorageService.instance;
+    storage.dataVersionNotifier.addListener(_onDataVersionChanged);
+    // Periodically watch for date change (e.g., past midnight) and auto-refresh
+    _startDateWatcher();
   }
 
   @override
   void dispose() {
+    LocalStorageService.instance.dataVersionNotifier.removeListener(_onDataVersionChanged);
+    _dateWatcher?.cancel();
     super.dispose();
   }
 
   // Avatar visuals are now centralized via ProfileAvatarButton
+
+  void _onDataVersionChanged() {
+    if (!mounted) return;
+    _refresh();
+  }
+
+  void _startDateWatcher() {
+    _dateWatcher?.cancel();
+    // Check every 30 seconds to minimize battery while being responsive around midnight
+    _dateWatcher = Timer.periodic(const Duration(seconds: 30), (_) => _checkDateChange());
+  }
+
+  void _checkDateChange() {
+    final nowKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (nowKey != _todayKey) {
+      // Day rolled over while app is open -> update key and reinitialize
+      setState(() {
+        _todayKey = nowKey;
+        _ready = false;
+      });
+      _init();
+    }
+  }
+
+  Future<void> _refresh() async {
+    await _init();
+  }
 
   Future<void> _init() async {
     final storage = LocalStorageService.instance;
@@ -58,20 +94,47 @@ class _HomePageState extends State<HomePage> {
     final bestStrike = await storage.getBestStrike();
     final extraAdded = await storage.getExtraCount(_todayKey);
 
-    // Apply missed-day penalty once per day: if last completed is neither today nor yesterday
+    // Apply missed-day penalty once per day, but only when the calendar moves forward naturally.
+    // If the device date is moved backward, skip penalties and just mark the check as done for that date.
     final last = await storage.getLastCompletedDate();
     final checkedDate = await storage.getPenaltyCheckedDate();
+    final lastOpened = await storage.getLastOpenedDate();
     final today = DateTime.parse(_todayKey);
     final yesterdayKey = DateFormat('yyyy-MM-dd').format(today.subtract(const Duration(days: 1)));
-    if (checkedDate != _todayKey) {
-      if (last != null && last != _todayKey && last != yesterdayKey) {
-        // Missed yesterday => reset strike and drop 1 level
-        int newStrike = 0;
-        int newTotalXp = _baseXpForLevel((_levelFromXp(totalXp) - 1).clamp(1, 999)) - 0;
-        // Prevent negative XP
-        if (newTotalXp < 0) newTotalXp = 0;
-        await storage.setStrike(newStrike);
-        await storage.setTotalXp(newTotalXp);
+
+    final movedBackward = (lastOpened != null)
+        ? today.isBefore(DateTime.parse(lastOpened))
+        : false;
+
+    if (movedBackward) {
+      // Purge any future-day records beyond the rolled-back today to emulate a full rewind.
+      final parsedLastOpened = DateTime.parse(lastOpened);
+      final futureEnd = parsedLastOpened.isAfter(today)
+          ? parsedLastOpened
+          : today.add(const Duration(days: 60));
+      for (DateTime d = today.add(const Duration(days: 1)); !d.isAfter(futureEnd); d = d.add(const Duration(days: 1))) {
+        final key = DateFormat('yyyy-MM-dd').format(d);
+        await storage.removeDailyData(key);
+      }
+      // Rebuild global stats up to the rolled-back date so UI reflects the timeline up to "today".
+      await _recalculateStatsUpTo(_todayKey);
+      // Notify other tabs (Progress/Achievements) to refresh their views
+      storage.bumpDataVersion();
+      await storage.setPenaltyCheckedDate(_todayKey);
+    } else if (checkedDate != _todayKey) {
+      // Only consider penalty on a natural next-day transition: the app was opened yesterday,
+      // and now we open it today (no gaps or manual jumps). This avoids false resets when
+      // users change the device date forward temporarily.
+      final shouldConsider = (lastOpened != null) && (lastOpened == yesterdayKey);
+      if (shouldConsider) {
+        if (last != null && last != _todayKey && last != yesterdayKey) {
+          // Missed yesterday => reset strike and drop 1 level
+          int newStrike = 0;
+          int newTotalXp = _baseXpForLevel((_levelFromXp(totalXp) - 1).clamp(1, 999)) - 0;
+          if (newTotalXp < 0) newTotalXp = 0;
+          await storage.setStrike(newStrike);
+          await storage.setTotalXp(newTotalXp);
+        }
       }
       await storage.setPenaltyCheckedDate(_todayKey);
     }
@@ -99,6 +162,77 @@ class _HomePageState extends State<HomePage> {
       _todayConfirmed = last == _todayKey; // if already confirmed today
       _ready = true; // now safe to render full UI
     });
+
+    // Record last opened date for next launch to detect backward time changes safely
+    await storage.setLastOpenedDate(_todayKey);
+  }
+
+  Future<void> _recalculateStatsUpTo(String todayKey) async {
+    final storage = LocalStorageService.instance;
+    // Define a reasonable look-back window (1 year)
+    final today = DateTime.parse(todayKey);
+    final start = DateTime(today.year - 1, today.month, today.day);
+
+    int totalXp = 0;
+    int totalWorkouts = 0;
+    int currentStreak = 0;
+    int bestStreak = 0;
+    String? lastCompletedDate;
+
+    // Iterate day by day
+    for (DateTime d = start; !d.isAfter(today); d = d.add(const Duration(days: 1))) {
+      final key = DateFormat('yyyy-MM-dd').format(d);
+      final challenges = await storage.getChallenges(key) ?? const <String>[];
+      final done = await storage.getChallengesDone(key);
+
+      // Sum XP for all completed challenges that day
+      for (int i = 0; i < challenges.length && i < done.length; i++) {
+        if (done[i]) {
+          totalXp += _xpForChallenge(challenges[i]);
+        }
+      }
+
+      // A day counts as a workout if first 3 challenges are complete
+      final dailyCompleted = done.take(3).every((e) => e == true);
+      if (dailyCompleted) {
+        totalWorkouts += 1;
+        lastCompletedDate = key;
+        // Update current streak considering consecutive day
+        final prev = d.subtract(const Duration(days: 1));
+        final prevKey = DateFormat('yyyy-MM-dd').format(prev);
+        // If yesterday was also completed, continue streak; else reset to 1
+        // We can't query yesterday now cheaply; we use currentStreak rule:
+        // When not consecutive, start a fresh streak
+        if (prev.isBefore(start)) {
+          currentStreak = 1;
+        } else {
+          // We approximate consecutiveness by checking if previous day was the immediate previous loop iteration with completed.
+          // To make it exact, we recompute consecutiveness by checking prev day's completion.
+          final prevDone = await storage.getChallengesDone(prevKey);
+          final prevCompleted = prevDone.take(3).every((e) => e == true);
+          currentStreak = prevCompleted ? currentStreak + 1 : 1;
+        }
+        if (currentStreak > bestStreak) bestStreak = currentStreak;
+      } else {
+        // Break streak on a day without completion
+        currentStreak = 0;
+      }
+    }
+
+    // Save recomputed totals
+    await storage.setTotalXp(totalXp);
+    await storage.setTotalWorkouts(totalWorkouts);
+    await storage.setStrike(currentStreak);
+    await storage.setBestStrike(bestStreak);
+    if (lastCompletedDate != null) {
+      await storage.setLastCompletedDate(lastCompletedDate);
+    }
+
+    // Recompute badges from level thresholds
+    final levelNow = _levelFromXp(totalXp);
+    final thresholds = const [10, 25, 45, 65, 75, 100];
+    final badges = thresholds.where((t) => levelNow >= t).toList();
+    await storage.setBadges(badges);
   }
 
   Future<void> _toggle(int index, bool value) async {

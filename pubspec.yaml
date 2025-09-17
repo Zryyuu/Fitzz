@@ -39,6 +39,8 @@ dependencies:
   ionicons: ^0.2.2
   image_picker: ^1.1.2
   material_symbols_icons: ^4.2801.0
+  path_provider: ^2.1.4
+  firebase_core: ^4.1.0
 
 dev_dependencies:
   flutter_test:

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Legacy (pre-Android 12) backup rules. We keep default includes.
+         We do NOT exclude FlutterSharedPreferences.xml so progress data is restored.
+         Note: Cannot exclude per-key here; that is handled by data_extraction_rules.xml on Android 12+. -->
+</full-backup-content>

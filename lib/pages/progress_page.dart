@@ -18,11 +18,36 @@ class _ProgressPageState extends State<ProgressPage> {
   int _strike = 0;
   String _lastDate = '';
   bool _ready = false; // prevent flicker until async init completes
+  // Monthly grid state
+  late DateTime _visibleMonth; // first day of month
+  Set<int> _completedDays = <int>{}; // set of day numbers in visible month
+  bool _loadingMonth = false;
+
+  // Allow parent (e.g., TabShell) to trigger a manual refresh when this tab becomes visible
+  Future<void> refresh() async {
+    await _init();
+  }
 
   @override
   void initState() {
     super.initState();
+    _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
     _init();
+    // Auto-refresh when global data version bumps (e.g., after rewind)
+    final storage = LocalStorageService.instance;
+    storage.dataVersionNotifier.addListener(_onDataVersionChanged);
+  }
+
+  void _onDataVersionChanged() {
+    // silently refresh; ignore if widget not mounted
+    if (!mounted) return;
+    refresh();
+  }
+
+  @override
+  void dispose() {
+    LocalStorageService.instance.dataVersionNotifier.removeListener(_onDataVersionChanged);
+    super.dispose();
   }
 
   Future<void> _init() async {
@@ -34,6 +59,29 @@ class _ProgressPageState extends State<ProgressPage> {
       _strike = strike;
       _lastDate = last;
       _ready = true;
+    });
+    // Load the initial month after basic stats are ready
+    await _loadMonthData(_visibleMonth);
+  }
+
+  // Load all days in a month and mark those completed (first 3 challenges done)
+  Future<void> _loadMonthData(DateTime month) async {
+    if (!mounted) return;
+    setState(() => _loadingMonth = true);
+    final storage = LocalStorageService.instance;
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final completed = <int>{};
+    for (int d = 1; d <= daysInMonth; d++) {
+      final date = DateTime(month.year, month.month, d);
+      final key = DateFormat('yyyy-MM-dd').format(date);
+      final done = await storage.getChallengesDone(key);
+      final dailyCompleted = done.take(3).every((e) => e == true);
+      if (dailyCompleted) completed.add(d);
+    }
+    if (!mounted) return;
+    setState(() {
+      _completedDays = completed;
+      _loadingMonth = false;
     });
   }
 
@@ -104,45 +152,117 @@ class _ProgressPageState extends State<ProgressPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Grafik Mingguan', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 12),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(7, (index) {
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: index == 6 ? 0 : 6),
-                        child: Container(
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: index < (_strike % 7) ? Colors.black : const Color(0xFFE6E6E6),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                  children: [
+                    Expanded(
+                      child: Text('Grafik Bulanan', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                    IconButton(
+                      tooltip: 'Bulan sebelumnya',
+                      onPressed: () async {
+                        setState(() => _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month - 1));
+                        await _loadMonthData(_visibleMonth);
+                      },
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F3F3),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    Text('Sen'),
-                    Text('Sel'),
-                    Text('Rab'),
-                    Text('Kam'),
-                    Text('Jum'),
-                    Text('Sab'),
-                    Text('Min'),
+                      child: Text(DateFormat('MMMM yyyy').format(_visibleMonth), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    IconButton(
+                      tooltip: 'Bulan berikutnya',
+                      onPressed: (DateTime(_visibleMonth.year, _visibleMonth.month + 1).isAfter(DateTime.now()))
+                          ? null
+                          : () async {
+                              setState(() => _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + 1));
+                              await _loadMonthData(_visibleMonth);
+                            },
+                      icon: const Icon(Icons.chevron_right),
+                    ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                // Weekday headers
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: const [
+                      Text('Sen', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Sel', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Rab', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Kam', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Jum', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Sab', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Min', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (_loadingMonth) const LinearProgressIndicator(minHeight: 2),
+                if (_loadingMonth) const SizedBox(height: 6),
+                _monthlyGrid(theme),
               ],
             ),
           ),
-            ],
-          ),
+          ],
         ),
       ),
+    ),
+  );
+}
+
+  Widget _monthlyGrid(ThemeData theme) {
+    // Build a compact 7-column grid. Monday is the first day.
+    final month = _visibleMonth;
+    final first = DateTime(month.year, month.month, 1);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final startOffset = (first.weekday + 6) % 7; // 0..6, Monday-first
+    final totalCells = startOffset + daysInMonth;
+    final rows = (totalCells / 7).ceil();
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        mainAxisSpacing: 6,
+        crossAxisSpacing: 6,
+        childAspectRatio: 1,
+      ),
+      itemCount: rows * 7,
+      itemBuilder: (context, index) {
+        final dayNum = index - startOffset + 1;
+        final inMonth = dayNum >= 1 && dayNum <= daysInMonth;
+        if (!inMonth) {
+          return const SizedBox.shrink();
+        }
+        final date = DateTime(month.year, month.month, dayNum);
+        final isToday = DateTime.now().year == date.year && DateTime.now().month == date.month && DateTime.now().day == date.day;
+        final completed = _completedDays.contains(dayNum);
+        final isFuture = date.isAfter(DateTime.now());
+        final baseColor = completed
+            ? const Color(0xFF2E7D32) // green
+            : isFuture
+                ? const Color(0xFFEDEDED)
+                : const Color(0xFFD9D9D9);
+        return Tooltip(
+          message: DateFormat('EEE, dd MMM').format(date) + (completed ? ' • Selesai' : ''),
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: baseColor,
+              borderRadius: BorderRadius.circular(5),
+              border: isToday ? Border.all(color: Colors.black, width: 1) : null,
+            ),
+          ),
+        );
+      },
     );
   }
 }

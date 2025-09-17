@@ -21,19 +21,36 @@ class _ProfileAvatarButtonState extends State<ProfileAvatarButton> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _attachListeners();
   }
 
-  Future<void> _load() async {
+  void _attachListeners() async {
     final storage = LocalStorageService.instance;
-    final avatar = await storage.getAvatarBase64();
-    final badge = await storage.getSelectedBadgeLevel();
+    // Ensure notifiers have initial values
+    await storage.preloadNotifiers();
+    _avatarBase64 = storage.avatarBase64Notifier.value;
+    _selectedBadge = storage.selectedBadgeLevelNotifier.value;
+    if (mounted) setState(() => _loading = false);
+
+    storage.avatarBase64Notifier.addListener(_onNotified);
+    storage.selectedBadgeLevelNotifier.addListener(_onNotified);
+  }
+
+  void _onNotified() {
+    final storage = LocalStorageService.instance;
     if (!mounted) return;
     setState(() {
-      _avatarBase64 = avatar;
-      _selectedBadge = badge;
-      _loading = false;
+      _avatarBase64 = storage.avatarBase64Notifier.value;
+      _selectedBadge = storage.selectedBadgeLevelNotifier.value;
     });
+  }
+
+  @override
+  void dispose() {
+    final storage = LocalStorageService.instance;
+    storage.avatarBase64Notifier.removeListener(_onNotified);
+    storage.selectedBadgeLevelNotifier.removeListener(_onNotified);
+    super.dispose();
   }
 
   Color _ringColorForBadge(int? level) {

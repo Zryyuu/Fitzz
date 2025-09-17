@@ -1,5 +1,5 @@
 import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageKeys {
@@ -15,6 +15,7 @@ class StorageKeys {
   static const bestStrike = 'best_strike';
   static const badgesEarned = 'badges_earned'; // json list<int>
   static const penaltyCheckedDate = 'penalty_checked_date'; // yyyy-MM-dd
+  static const lastOpenedDate = 'last_opened_date'; // yyyy-MM-dd, used to guard penalty when clock moves backward
   static const selectedBadgeLevel = 'selected_badge_level'; // int, one of thresholds
   // Profile
   static const displayName = 'user_display_name';
@@ -32,6 +33,24 @@ class LocalStorageService {
   static final LocalStorageService instance = LocalStorageService._();
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
+
+  // Live notifiers so UI can react immediately when profile visuals change
+  // These are lightweight and only notify listeners when values are updated via setters below.
+  // Consumers can read the latest values using `.value` or call the async getters for persistence.
+  final ValueNotifier<String?> avatarBase64Notifier = ValueNotifier<String?>(null);
+  final ValueNotifier<int?> selectedBadgeLevelNotifier = ValueNotifier<int?>(null);
+  // Bumps whenever persisted data changes in a way that pages should reload (e.g., rewind)
+  final ValueNotifier<int> dataVersionNotifier = ValueNotifier<int>(0);
+
+  // Allow widgets to sync initial notifier values (e.g., at app start)
+  Future<void> preloadNotifiers() async {
+    avatarBase64Notifier.value = await getAvatarBase64();
+    selectedBadgeLevelNotifier.value = await getSelectedBadgeLevel();
+  }
+
+  void bumpDataVersion() {
+    dataVersionNotifier.value = dataVersionNotifier.value + 1;
+  }
 
   // Helpers: namespacing per email
   String _nsKey(String email, String base) => 'user_${email.toLowerCase()}__$base';
@@ -119,6 +138,8 @@ class LocalStorageService {
     } else {
       await p.setString(_nsKey(email, StorageKeys.avatarBase64), base64);
     }
+    // Broadcast change so avatar widgets update instantly
+    avatarBase64Notifier.value = base64?.isEmpty == true ? null : base64;
   }
 
   // Profile: Password (local-only demo; not secure)
@@ -257,6 +278,21 @@ class LocalStorageService {
     await p.setString(_nsKey(email, StorageKeys.penaltyCheckedDate), yyyymmdd);
   }
 
+  // Track last date the app considered as "today" to avoid penalties when user moves clock backward
+  Future<String?> getLastOpenedDate() async {
+    final p = await _prefs;
+    final email = await _getActiveEmail();
+    if (email == null) return null;
+    return p.getString(_nsKey(email, StorageKeys.lastOpenedDate));
+  }
+
+  Future<void> setLastOpenedDate(String yyyymmdd) async {
+    final p = await _prefs;
+    final email = await _getActiveEmail();
+    if (email == null) return;
+    await p.setString(_nsKey(email, StorageKeys.lastOpenedDate), yyyymmdd);
+  }
+
   // Extra challenges added count per date
   Future<int> getExtraCount(String yyyymmdd) async {
     final p = await _prefs;
@@ -289,6 +325,8 @@ class LocalStorageService {
     } else {
       await p.setInt(_nsKey(email, StorageKeys.selectedBadgeLevel), level);
     }
+    // Notify listeners (e.g., avatar ring color)
+    selectedBadgeLevelNotifier.value = level;
   }
 
   Future<List<String>?> getChallenges(String yyyymmdd) async {
@@ -336,5 +374,16 @@ class LocalStorageService {
     final email = await _getActiveEmail();
     if (email == null) return;
     await p.setBool(_nsKey(email, StorageKeys.challengesRevealedForDate(yyyymmdd)), revealed);
+  }
+
+  // Remove all stored data for a specific date (used for rollback when device date moves backward)
+  Future<void> removeDailyData(String yyyymmdd) async {
+    final p = await _prefs;
+    final email = await _getActiveEmail();
+    if (email == null) return;
+    await p.remove(_nsKey(email, StorageKeys.challengesForDate(yyyymmdd)));
+    await p.remove(_nsKey(email, StorageKeys.challengesDoneForDate(yyyymmdd)));
+    await p.remove(_nsKey(email, StorageKeys.challengesRevealedForDate(yyyymmdd)));
+    await p.remove(_nsKey(email, StorageKeys.extraCountForDate(yyyymmdd)));
   }
 }
