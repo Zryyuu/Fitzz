@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:fitzz/firebase_options.dart';
 import 'package:fitzz/pages/splash_page.dart';
 import 'package:fitzz/pages/login_page.dart';
 import 'package:fitzz/pages/register_page.dart';
@@ -8,7 +10,9 @@ import 'package:fitzz/pages/achievements_page.dart';
 import 'package:fitzz/pages/library_page.dart';
 import 'package:fitzz/pages/profile_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 

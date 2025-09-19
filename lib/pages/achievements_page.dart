@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:fitzz/widgets/profile_avatar_button.dart';
-import 'package:fitzz/services/storage_service.dart';
+import 'package:fitzz/services/firebase_user_service.dart';
 
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key, this.withBottomNav = true});
@@ -33,7 +33,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
   }
 
   Future<void> _init() async {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     final strike = await storage.getStrike();
     final bestStrike = await storage.getBestStrike();
     final totalXp = await storage.getTotalXp();

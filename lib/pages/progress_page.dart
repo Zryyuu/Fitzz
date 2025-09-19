@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:fitzz/services/storage_service.dart';
+import 'package:fitzz/services/firebase_user_service.dart';
 import 'package:intl/intl.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
@@ -14,7 +14,7 @@ class ProgressPage extends StatefulWidget {
   State<ProgressPage> createState() => _ProgressPageState();
 }
 
-class _ProgressPageState extends State<ProgressPage> {
+class _ProgressPageState extends State<ProgressPage> with WidgetsBindingObserver {
   int _strike = 0;
   String _lastDate = '';
   bool _ready = false; // prevent flicker until async init completes
@@ -22,6 +22,7 @@ class _ProgressPageState extends State<ProgressPage> {
   late DateTime _visibleMonth; // first day of month
   Set<int> _completedDays = <int>{}; // set of day numbers in visible month
   bool _loadingMonth = false;
+  int _monthLoadSeq = 0; // sequence guard for month loading
 
   // Allow parent (e.g., TabShell) to trigger a manual refresh when this tab becomes visible
   Future<void> refresh() async {
@@ -31,10 +32,11 @@ class _ProgressPageState extends State<ProgressPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
     _init();
     // Auto-refresh when global data version bumps (e.g., after rewind)
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     storage.dataVersionNotifier.addListener(_onDataVersionChanged);
   }
 
@@ -46,12 +48,21 @@ class _ProgressPageState extends State<ProgressPage> {
 
   @override
   void dispose() {
-    LocalStorageService.instance.dataVersionNotifier.removeListener(_onDataVersionChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    FirebaseUserService.instance.dataVersionNotifier.removeListener(_onDataVersionChanged);
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh stats and the current month when returning to the app
+      refresh();
+    }
+  }
+
   Future<void> _init() async {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     final strike = await storage.getStrike();
     final last = await storage.getLastCompletedDate() ?? '-';
     if (!mounted) return;
@@ -67,8 +78,13 @@ class _ProgressPageState extends State<ProgressPage> {
   // Load all days in a month and mark those completed (first 3 challenges done)
   Future<void> _loadMonthData(DateTime month) async {
     if (!mounted) return;
-    setState(() => _loadingMonth = true);
-    final storage = LocalStorageService.instance;
+    final int seq = ++_monthLoadSeq; // mark this request as the latest
+    setState(() {
+      _loadingMonth = true;
+      // Kosongkan tampilan selesai agar tidak terbawa saat loading bulan baru
+      _completedDays = <int>{};
+    });
+    final storage = FirebaseUserService.instance;
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final completed = <int>{};
     for (int d = 1; d <= daysInMonth; d++) {
@@ -79,6 +95,10 @@ class _ProgressPageState extends State<ProgressPage> {
       if (dailyCompleted) completed.add(d);
     }
     if (!mounted) return;
+    // Drop results if a newer month load has started or month view has changed
+    if (seq != _monthLoadSeq || month.year != _visibleMonth.year || month.month != _visibleMonth.month) {
+      return;
+    }
     setState(() {
       _completedDays = completed;
       _loadingMonth = false;
@@ -203,7 +223,12 @@ class _ProgressPageState extends State<ProgressPage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                if (_loadingMonth) const LinearProgressIndicator(minHeight: 2),
+                if (_loadingMonth)
+                  const LinearProgressIndicator(
+                    minHeight: 3,
+                    color: Color(0xFFBDBDBD),
+                    backgroundColor: Color(0xFFEDEDED),
+                  ),
                 if (_loadingMonth) const SizedBox(height: 6),
                 _monthlyGrid(theme),
               ],
@@ -243,7 +268,8 @@ class _ProgressPageState extends State<ProgressPage> {
         }
         final date = DateTime(month.year, month.month, dayNum);
         final isToday = DateTime.now().year == date.year && DateTime.now().month == date.month && DateTime.now().day == date.day;
-        final completed = _completedDays.contains(dayNum);
+        // Saat loading, abaikan status selesai agar kotak tampil netral
+        final completed = !_loadingMonth && _completedDays.contains(dayNum);
         final isFuture = date.isAfter(DateTime.now());
         final baseColor = completed
             ? const Color(0xFF2E7D32) // green

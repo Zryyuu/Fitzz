@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:fitzz/services/storage_service.dart';
 import 'package:ionicons/ionicons.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -20,20 +21,35 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 300));
       final email = _emailCtrl.text.trim().toLowerCase();
       final pass = _passCtrl.text;
-      final storage = LocalStorageService.instance;
-      final ok = await storage.validateCredentials(email: email, password: pass);
-      if (!ok) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email atau password salah')));
-        return;
+      // Sign in with Firebase Auth
+      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: pass);
+      // Ensure user doc exists
+      try {
+        final uid = FirebaseAuth.instance.currentUser!.uid;
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+        final snap = await userDoc.get();
+        if (!snap.exists) {
+          await userDoc.set({'email': email}, SetOptions(merge: true));
+        }
+      } on FirebaseException catch (e) {
+        // Most likely Firestore security rules: permission-denied
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal akses profil: ${e.message ?? e.code}')),
+          );
+        }
+        // Continue to app; some pages may be limited until rules are fixed
       }
-      await storage.setActiveEmail(email);
-      await storage.setLoggedIn(true);
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/home');
+    } on FirebaseAuthException catch (e) {
+      String msg = 'Login gagal';
+      if (e.code == 'invalid-credential' || e.code == 'wrong-password') msg = 'Email atau password salah';
+      if (e.code == 'user-not-found') msg = 'Akun tidak ditemukan';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

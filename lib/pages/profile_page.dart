@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:fitzz/services/storage_service.dart';
+import 'package:fitzz/services/firebase_user_service.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 
 class ProfilePage extends StatefulWidget {
@@ -16,14 +17,35 @@ class _ProfilePageState extends State<ProfilePage> {
   List<int> _earnedBadges = const [];
   int? _selectedBadge;
   bool _loading = true;
-  String? _avatarBase64;
+  String? _avatarUrl;
+  String? _avatarData; // base64 avatar (tanpa Storage)
+  VoidCallback? _avatarUrlListener;
+  VoidCallback? _avatarDataListener;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _attachLiveListeners();
   }
 
+  ImageProvider? _buildImageProvider({bool preview = false, String? tempData, bool useBase64 = false}) {
+    // Preview mode: when useBase64 with tempData, do NOT fallback to stored avatar when tempData is null/empty.
+    if (preview && useBase64) {
+      if (tempData != null && tempData.isNotEmpty) {
+        try { return MemoryImage(base64Decode(tempData)); } catch (_) { return null; }
+      }
+      return null; // explicit no fallback in preview to avoid showing stale image after delete
+    }
+    // Non-preview: Prefer base64 avatarData, then fallback to URL.
+    if (_avatarData != null && _avatarData!.isNotEmpty) {
+      try { return MemoryImage(base64Decode(_avatarData!)); } catch (_) { return null; }
+    }
+    if (_avatarUrl != null && _avatarUrl!.isNotEmpty) {
+      return NetworkImage(_avatarUrl!);
+    }
+    return null;
+  }
   Future<void> _showPreviewDialog() async {
     await showDialog(
       context: context,
@@ -44,8 +66,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: CircleAvatar(
                   radius: 60,
                   backgroundColor: Colors.white,
-                  backgroundImage: _avatarBase64 == null ? null : MemoryImage(base64Decode(_avatarBase64!)),
-                  child: _avatarBase64 == null ? const Icon(Icons.person, color: Colors.black, size: 48) : null,
+                  backgroundImage: _buildImageProvider(preview: true),
+                  child: _buildImageProvider(preview: true) == null ? const Icon(Icons.person, color: Colors.black, size: 48) : null,
                 ),
               ),
               const SizedBox(height: 12),
@@ -68,15 +90,24 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _attachLiveListeners() async {
+    final s = FirebaseUserService.instance;
+    await s.preloadNotifiers();
+    _avatarUrlListener = () { if (mounted) setState(() => _avatarUrl = s.avatarUrlNotifier.value); };
+    _avatarDataListener = () { if (mounted) setState(() => _avatarData = s.avatarDataNotifier.value); };
+    s.avatarUrlNotifier.addListener(_avatarUrlListener!);
+    s.avatarDataNotifier.addListener(_avatarDataListener!);
+  }
+
   Future<void> _showEditDialog() async {
     final nameCtrl = TextEditingController(text: _displayName ?? '');
-    String? tempAvatar = _avatarBase64;
+    String? tempAvatarData = _avatarData;
     int? tempBadge = _selectedBadge;
     await showDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setLocal) {
-          final imageProvider = tempAvatar == null ? null : MemoryImage(base64Decode(tempAvatar!));
+          final ImageProvider? imageProvider = _buildImageProvider(preview: true, tempData: tempAvatarData, useBase64: true);
           return AlertDialog(
             title: const Text('Edit Profil'),
             content: SingleChildScrollView(
@@ -106,11 +137,33 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         ElevatedButton.icon(
                           onPressed: () async {
-                            final picker = ImagePicker();
-                            final f = await picker.pickImage(source: ImageSource.gallery, maxWidth: 600, imageQuality: 85);
-                            if (f == null) return;
-                            final b64 = base64Encode(await f.readAsBytes());
-                            setLocal(() => tempAvatar = b64);
+                            try {
+                              final picker = ImagePicker();
+                              final f = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 80);
+                              if (f == null) return;
+                              final uid = FirebaseAuth.instance.currentUser?.uid;
+                              if (uid == null) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sesi pengguna tidak ditemukan')));
+                                return;
+                              }
+                              final bytes = await f.readAsBytes();
+                              final b64 = base64Encode(bytes);
+                              setLocal(() => tempAvatarData = b64);
+                              // Simpan ke Firestore sebagai base64 dan notifikasi UI
+                              await FirebaseUserService.instance.setAvatarData(b64);
+                              if (mounted) {
+                                setState(() {
+                                  _avatarData = b64;
+                                  _avatarUrl = null;
+                                });
+                              }
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto profil diperbarui')));
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan foto: $e')));
+                            }
                           },
                           icon: const Icon(Icons.photo_library_outlined),
                           label: const Text('Ganti Foto'),
@@ -131,7 +184,15 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             );
                             if (ok == true) {
-                              setLocal(() => tempAvatar = null);
+                              setLocal(() => tempAvatarData = null);
+                              await FirebaseUserService.instance.setAvatarData(null);
+                              await FirebaseUserService.instance.setAvatarUrl(null);
+                              if (mounted) {
+                                setState(() {
+                                  _avatarData = null;
+                                  _avatarUrl = null;
+                                });
+                              }
                             }
                           },
                           icon: const Icon(Icons.delete_outline),
@@ -155,12 +216,10 @@ class _ProfilePageState extends State<ProfilePage> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
               ElevatedButton(
                 onPressed: () async {
-                  await LocalStorageService.instance.setDisplayName(nameCtrl.text.trim());
-                  await LocalStorageService.instance.setAvatarBase64(tempAvatar);
+                  await FirebaseUserService.instance.setDisplayName(nameCtrl.text.trim());
                   if (!mounted) return;
                   setState(() {
                     _displayName = nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim();
-                    _avatarBase64 = tempAvatar;
                   });
                   if (!ctx.mounted) return;
                   Navigator.pop(ctx);
@@ -175,23 +234,24 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _load() async {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     final name = await storage.getDisplayName();
     final badges = await storage.getBadges();
     final selected = await storage.getSelectedBadgeLevel();
-    final avatar = await storage.getAvatarBase64();
+    final avatar = await storage.getAvatarUrl();
+    final avatarData = await storage.getAvatarData();
     setState(() {
       _displayName = name;
       _earnedBadges = badges;
       _selectedBadge = selected;
-      _avatarBase64 = avatar;
+      _avatarUrl = avatar;
+      _avatarData = avatarData;
       _loading = false;
     });
   }
 
   Future<void> _logout() async {
-    await LocalStorageService.instance.setLoggedIn(false);
-    await LocalStorageService.instance.setActiveEmail(null);
+    await FirebaseAuth.instance.signOut();
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
     }
@@ -219,7 +279,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final passOldCtrl = TextEditingController();
     final passNewCtrl = TextEditingController();
     final passConfCtrl = TextEditingController();
-    final currentSaved = await LocalStorageService.instance.getPassword();
     if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -247,10 +306,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final newPass = passNewCtrl.text.trim();
     final confPass = passConfCtrl.text.trim();
 
-    if ((currentSaved ?? '') != oldPass) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password sekarang salah')));
-      return;
-    }
     if (newPass.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password baru minimal 6 karakter')));
       return;
@@ -259,13 +314,34 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konfirmasi password tidak cocok')));
       return;
     }
-    await LocalStorageService.instance.setPassword(newPass);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password berhasil diubah')));
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada sesi pengguna')));
+        return;
+      }
+      // Reauthenticate
+      final email = user.email;
+      if (email == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email pengguna tidak ditemukan')));
+        return;
+      }
+      final cred = EmailAuthProvider.credential(email: email, password: oldPass);
+      await user.reauthenticateWithCredential(cred);
+      await user.updatePassword(newPass);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password berhasil diubah')));
+    } on FirebaseAuthException catch (e) {
+      String msg = 'Gagal mengubah password';
+      if (e.code == 'invalid-credential' || e.code == 'wrong-password') msg = 'Password sekarang salah';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return;
+    }
   }
 
   Future<void> _selectBadge(int? level) async {
-    await LocalStorageService.instance.setSelectedBadgeLevel(level);
+    await FirebaseUserService.instance.setSelectedBadgeLevel(level);
     if (!mounted) return;
     setState(() => _selectedBadge = level);
   }
@@ -293,9 +369,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _avatarPreview() {
-    final imageProvider = _avatarBase64 == null
-        ? null
-        : MemoryImage(base64Decode(_avatarBase64!));
+    final ImageProvider? imageProvider = _buildImageProvider();
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(

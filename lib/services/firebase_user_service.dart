@@ -2,35 +2,33 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+// Centralized keys used in Firestore user documents and subcollections
 class StorageKeys {
-  // Global (not namespaced)
-  static const loggedIn = 'logged_in';
-  static const activeEmail = 'active_user_email';
-
-  // Base keys (will be namespaced per email): user_{email}__<key>
+  // Base keys (namespaced under users/{uid})
   static const strikeCount = 'strike_count';
   static const lastCompletedDate = 'last_completed_date'; // yyyy-MM-dd
   static const totalXp = 'total_xp';
   static const totalWorkouts = 'total_workouts';
   static const bestStrike = 'best_strike';
-  static const badgesEarned = 'badges_earned'; // json list<int>
+  static const badgesEarned = 'badges_earned'; // list<int>
   static const penaltyCheckedDate = 'penalty_checked_date'; // yyyy-MM-dd
-  static const lastOpenedDate = 'last_opened_date'; // yyyy-MM-dd, used to guard penalty when clock moves backward
-  static const selectedBadgeLevel = 'selected_badge_level'; // int, one of thresholds
+  static const lastOpenedDate = 'last_opened_date'; // yyyy-MM-dd
+  static const selectedBadgeLevel = 'selected_badge_level'; // int
+  static const avatarData = 'avatar_data_base64'; // String? base64 of small image
   // Profile
   static const displayName = 'user_display_name';
-  static const password = 'user_password';
-  static const avatarBase64 = 'user_avatar_base64';
 
   static String challengesForDate(String yyyymmdd) => 'challenges_$yyyymmdd';
   static String challengesDoneForDate(String yyyymmdd) => 'challenges_done_$yyyymmdd';
   static String challengesRevealedForDate(String yyyymmdd) => 'challenges_revealed_$yyyymmdd';
   static String extraCountForDate(String yyyymmdd) => 'challenges_extra_count_$yyyymmdd';
- }
+}
 
-class LocalStorageService {
-  LocalStorageService._();
-  static final LocalStorageService instance = LocalStorageService._();
+// Firebase-only service for user data. All persistence uses Cloud Firestore
+// under users/{uid} and its subcollections.
+class FirebaseUserService {
+  FirebaseUserService._();
+  static final FirebaseUserService instance = FirebaseUserService._();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -41,18 +39,15 @@ class LocalStorageService {
     return _db.collection('users').doc(uid);
   }
 
-  // Live notifiers so UI can react immediately when profile visuals change
-  // These are lightweight and only notify listeners when values are updated via setters below.
-  // Consumers can read the latest values using `.value` or call the async getters for persistence.
-  // Avatar URL notifier (remote)
+  // Live notifiers for UI
   final ValueNotifier<String?> avatarUrlNotifier = ValueNotifier<String?>(null);
+  final ValueNotifier<String?> avatarDataNotifier = ValueNotifier<String?>(null);
   final ValueNotifier<int?> selectedBadgeLevelNotifier = ValueNotifier<int?>(null);
-  // Bumps whenever persisted data changes in a way that pages should reload (e.g., rewind)
   final ValueNotifier<int> dataVersionNotifier = ValueNotifier<int>(0);
 
-  // Allow widgets to sync initial notifier values (e.g., at app start)
   Future<void> preloadNotifiers() async {
     avatarUrlNotifier.value = await getAvatarUrl();
+    avatarDataNotifier.value = await getAvatarData();
     selectedBadgeLevelNotifier.value = await getSelectedBadgeLevel();
   }
 
@@ -60,30 +55,8 @@ class LocalStorageService {
     dataVersionNotifier.value = dataVersionNotifier.value + 1;
   }
 
-  // Helpers: active user
-  String? _activeEmail() => _auth.currentUser?.email;
-
-  // Public: active user management
-  Future<String?> getActiveEmail() async => _activeEmail();
-  Future<void> setActiveEmail(String? email) async {
-    // No-op: FirebaseAuth manages active user by sign-in/out.
-  }
-
-  Future<bool> isLoggedIn() async => _auth.currentUser != null;
-
-  Future<void> setLoggedIn(bool value) async {
-    // No-op: use FirebaseAuth.signIn/signOut instead
-  }
-
-  // ---------- AUTH (per-email) ----------
-  Future<bool> isUserRegistered(String email) async {
-    // Check if a user document exists with this email (best-effort)
-    final q = await _db.collection('users').where('email', isEqualTo: email.toLowerCase()).limit(1).get();
-    return q.docs.isNotEmpty;
-  }
-
-  Future<void> registerUser({required String email, required String password, String? displayName}) async {
-    // Prefer using FirebaseAuth in UI. Here we only create a user doc if signed-in.
+  // Registration helper (call after sign-up if needed)
+  Future<void> ensureUserProfile({String? displayName}) async {
     final doc = _userDoc();
     final user = _auth.currentUser;
     if (doc == null || user == null) return;
@@ -95,17 +68,15 @@ class LocalStorageService {
       StorageKeys.bestStrike: 0,
       StorageKeys.strikeCount: 0,
       'avatarUrl': null,
+      StorageKeys.avatarData: null,
       StorageKeys.badgesEarned: <int>[],
       StorageKeys.selectedBadgeLevel: null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
-  Future<bool> validateCredentials({required String email, required String password}) async {
-    // Deprecated: use FirebaseAuth in UI
-    return false;
-  }
-
-  // Profile: Display Name (active user)
+  // Profile: Display Name
   Future<String?> getDisplayName() async {
     final doc = _userDoc();
     if (doc == null) return null;
@@ -116,10 +87,10 @@ class LocalStorageService {
   Future<void> setDisplayName(String? name) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.displayName: (name ?? '').trim()}, SetOptions(merge: true));
+    await doc.set({StorageKeys.displayName: (name ?? '').trim(), 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // Profile: Avatar URL (Firebase Storage)
+  // Profile: Avatar URL (stored in users/{uid}.avatarUrl)
   Future<String?> getAvatarUrl() async {
     final doc = _userDoc();
     if (doc == null) return null;
@@ -130,28 +101,41 @@ class LocalStorageService {
   Future<void> setAvatarUrl(String? url) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({'avatarUrl': url}, SetOptions(merge: true));
+    await doc.set({'avatarUrl': url, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
     avatarUrlNotifier.value = (url == null || url.isEmpty) ? null : url;
   }
 
-  // Profile: Password (local-only demo; not secure)
-  Future<String?> getPassword() async {
-    // Not supported in Firebase for security reasons
-    return null;
+  // Profile: Avatar Data (base64 string) alternative to Storage URL
+  Future<String?> getAvatarData() async {
+    final doc = _userDoc();
+    if (doc == null) return null;
+    final snap = await doc.get();
+    return snap.data()?[StorageKeys.avatarData] as String?;
   }
 
-  Future<void> setPassword(String? password) async {
-    // Use FirebaseAuth.updatePassword in UI instead
+  Future<void> setAvatarData(String? base64) async {
+    final doc = _userDoc();
+    if (doc == null) return;
+    await doc.set({StorageKeys.avatarData: base64, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+    avatarDataNotifier.value = (base64 == null || base64.isEmpty) ? null : base64;
   }
 
-  // Direct (by email) variants used during login/register
-  Future<String?> getPasswordForEmail(String email) async { return null; }
-  Future<String?> getDisplayNameForEmail(String email) async {
-    final q = await _db.collection('users').where('email', isEqualTo: email.toLowerCase()).limit(1).get();
-    if (q.docs.isEmpty) return null;
-    return q.docs.first.data()[StorageKeys.displayName] as String?;
+  // Selected badge level (avatar border)
+  Future<int?> getSelectedBadgeLevel() async {
+    final doc = _userDoc();
+    if (doc == null) return null;
+    final snap = await doc.get();
+    return (snap.data()?[StorageKeys.selectedBadgeLevel] as int?);
   }
 
+  Future<void> setSelectedBadgeLevel(int? level) async {
+    final doc = _userDoc();
+    if (doc == null) return;
+    await doc.set({StorageKeys.selectedBadgeLevel: level, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+    selectedBadgeLevelNotifier.value = level;
+  }
+
+  // Strike
   Future<int> getStrike() async {
     final doc = _userDoc();
     if (doc == null) return 0;
@@ -162,9 +146,10 @@ class LocalStorageService {
   Future<void> setStrike(int value) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.strikeCount: value}, SetOptions(merge: true));
+    await doc.set({StorageKeys.strikeCount: value, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
+  // Dates
   Future<String?> getLastCompletedDate() async {
     final doc = _userDoc();
     if (doc == null) return null;
@@ -175,10 +160,10 @@ class LocalStorageService {
   Future<void> setLastCompletedDate(String yyyymmdd) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.lastCompletedDate: yyyymmdd}, SetOptions(merge: true));
+    await doc.set({StorageKeys.lastCompletedDate: yyyymmdd, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // XP & Workouts summary
+  // XP & Workouts
   Future<int> getTotalXp() async {
     final doc = _userDoc();
     if (doc == null) return 0;
@@ -189,7 +174,7 @@ class LocalStorageService {
   Future<void> setTotalXp(int value) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.totalXp: value}, SetOptions(merge: true));
+    await doc.set({StorageKeys.totalXp: value, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
   Future<int> getTotalWorkouts() async {
@@ -202,10 +187,9 @@ class LocalStorageService {
   Future<void> setTotalWorkouts(int value) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.totalWorkouts: value}, SetOptions(merge: true));
+    await doc.set({StorageKeys.totalWorkouts: value, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // Best strike
   Future<int> getBestStrike() async {
     final doc = _userDoc();
     if (doc == null) return 0;
@@ -216,10 +200,10 @@ class LocalStorageService {
   Future<void> setBestStrike(int value) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.bestStrike: value}, SetOptions(merge: true));
+    await doc.set({StorageKeys.bestStrike: value, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // Badges earned (levels achieved)
+  // Badges
   Future<List<int>> getBadges() async {
     final doc = _userDoc();
     if (doc == null) return <int>[];
@@ -233,10 +217,10 @@ class LocalStorageService {
     final doc = _userDoc();
     if (doc == null) return;
     badges = badges.toSet().toList()..sort();
-    await doc.set({StorageKeys.badgesEarned: badges}, SetOptions(merge: true));
+    await doc.set({StorageKeys.badgesEarned: badges, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // Penalty checked date
+  // Penalty guards
   Future<String?> getPenaltyCheckedDate() async {
     final doc = _userDoc();
     if (doc == null) return null;
@@ -247,10 +231,9 @@ class LocalStorageService {
   Future<void> setPenaltyCheckedDate(String yyyymmdd) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.penaltyCheckedDate: yyyymmdd}, SetOptions(merge: true));
+    await doc.set({StorageKeys.penaltyCheckedDate: yyyymmdd, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // Track last date the app considered as "today" to avoid penalties when user moves clock backward
   Future<String?> getLastOpenedDate() async {
     final doc = _userDoc();
     if (doc == null) return null;
@@ -261,37 +244,22 @@ class LocalStorageService {
   Future<void> setLastOpenedDate(String yyyymmdd) async {
     final doc = _userDoc();
     if (doc == null) return;
-    await doc.set({StorageKeys.lastOpenedDate: yyyymmdd}, SetOptions(merge: true));
+    await doc.set({StorageKeys.lastOpenedDate: yyyymmdd, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
   }
 
-  // Extra challenges added count per date
+  // Daily subcollection
   Future<int> getExtraCount(String yyyymmdd) async {
     final doc = _userDoc();
     if (doc == null) return 0;
     final dailyDoc = doc.collection('daily').doc(yyyymmdd);
     final snap = await dailyDoc.get();
     return (snap.data()?['extraAdded'] as int?) ?? 0;
-    }
+  }
 
   Future<void> setExtraCount(String yyyymmdd, int count) async {
     final doc = _userDoc();
     if (doc == null) return;
     await doc.collection('daily').doc(yyyymmdd).set({'extraAdded': count}, SetOptions(merge: true));
-  }
-
-  // Selected badge (used e.g., as avatar border)
-  Future<int?> getSelectedBadgeLevel() async {
-    final doc = _userDoc();
-    if (doc == null) return null;
-    final snap = await doc.get();
-    return (snap.data()?[StorageKeys.selectedBadgeLevel] as int?);
-  }
-
-  Future<void> setSelectedBadgeLevel(int? level) async {
-    final doc = _userDoc();
-    if (doc == null) return;
-    await doc.set({StorageKeys.selectedBadgeLevel: level}, SetOptions(merge: true));
-    selectedBadgeLevelNotifier.value = level;
   }
 
   Future<List<String>?> getChallenges(String yyyymmdd) async {
@@ -324,7 +292,6 @@ class LocalStorageService {
     await doc.collection('daily').doc(yyyymmdd).set({'done': done}, SetOptions(merge: true));
   }
 
-  // Daily reveal state
   Future<bool> getChallengesRevealed(String yyyymmdd) async {
     final doc = _userDoc();
     if (doc == null) return false;
@@ -339,7 +306,6 @@ class LocalStorageService {
     await doc.collection('daily').doc(yyyymmdd).set({'revealed': revealed}, SetOptions(merge: true));
   }
 
-  // Remove all stored data for a specific date (used for rollback when device date moves backward)
   Future<void> removeDailyData(String yyyymmdd) async {
     final doc = _userDoc();
     if (doc == null) return;

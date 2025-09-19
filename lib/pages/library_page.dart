@@ -15,6 +15,70 @@ class LibraryPage extends StatefulWidget {
 class _LibraryPageState extends State<LibraryPage> {
   bool _ready = false; // keep consistent UX with other tabs
 
+  // Sumber data gerakan: judul, deskripsi singkat, dan path asset GIF/JPG
+  final List<Map<String, String>> _moves = const [
+    {
+      'title': 'Push Up',
+      'desc': 'Dorong badan dari lantai. Jaga punggung lurus dan core aktif.',
+      'asset': 'Assets/Push-Up.gif',
+    },
+    {
+      'title': 'Plank',
+      'desc': 'Tahan badan di posisi plank. Jaga punggung lurus dan core aktif.',
+      'asset': 'Assets/Plank.png',
+    },
+    {
+      'title': 'Sit Up',
+      'desc': 'Angkat badan dari posisi telentang. Gunakan otot perut, bukan leher.',
+      'asset': 'Assets/Sit-up.gif',
+    },
+    {
+      'title': 'Squat',
+      'desc': 'Tekuk lutut dan dorong pinggul ke belakang. Tumit tetap menapak.',
+      'asset': 'Assets/Squat.gif',
+    },
+    {
+      'title': 'Lunge',
+      'desc': 'Langkah satu kaki ke depan dan turunkan lutut belakang mendekati lantai.',
+      'asset': 'Assets/Lunge.gif',
+    },
+    {
+      'title': 'Burpee',
+      'desc': 'Kombinasi squat, plank, dan lompatan. Gerakan full body yang intens.',
+      'asset': 'Assets/Burpee.gif',
+    },
+    {
+      'title': 'Dip (Kursi)',
+      'desc': 'Gunakan kursi stabil. Turunkan tubuh dengan siku menekuk ke belakang.',
+      'asset': 'Assets/Dip.gif',
+    },
+    {
+      'title': 'Jumping Jack',
+      'desc': 'Buka-tutup kaki dan tangan sambil melompat. Ritme konstan.',
+      'asset': 'Assets/Jumping-jack.gif',
+    },
+    {
+      'title': 'High Knees',
+      'desc': 'Angkat lutut setinggi pinggang secara bergantian, gerak cepat.',
+      'asset': 'Assets/Highknee.gif',
+    },
+    {
+      'title': 'Mountain Climber',
+      'desc': 'Dari posisi plank, tarik lutut ke dada secara bergantian.',
+      'asset': 'Assets/Mountainclimb.gif',
+    },
+    {
+      'title': 'Jump Squat',
+      'desc': 'Lakukan squat lalu dorong ke atas dengan lompatan lembut.',
+      'asset': 'Assets/Jumpsquat.gif',
+    },
+    {
+      'title': 'Wall Sit',
+      'desc': 'Sandarkan punggung ke dinding, lutut 90°. Tahan posisi.',
+      'asset': 'Assets/Walllsit.jpeg',
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -27,11 +91,6 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final items = const [
-      {'title': 'Push Up', 'desc': 'Gerakan dorong untuk melatih dada dan trisep.'},
-      {'title': 'Squat', 'desc': 'Latihan kaki dan glute, jaga punggung tetap netral.'},
-      {'title': 'Plank', 'desc': 'Stabilitas core dengan menahan posisi plank.'},
-    ];
 
     if (!_ready) {
       return Scaffold(
@@ -65,25 +124,44 @@ class _LibraryPageState extends State<LibraryPage> {
           constraints: const BoxConstraints(maxWidth: 720),
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: items.length,
+            itemCount: _moves.length,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (_, i) {
-              final a = items[i];
+              final a = _moves[i];
               return Container(
-                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                child: Row(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.fitness_center_outlined),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
+                    // Media preview (GIF/JPG)
+                    AspectRatio(
+                      aspectRatio: 16/9,
+                      child: Image.asset(
+                        a['asset']!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFEDEDED)),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(a['title']!, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 4),
-                          Text(a['desc']!, style: theme.textTheme.bodySmall),
+                          const Icon(Icons.fitness_center_outlined),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(a['title']!, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 6),
+                                Text(a['desc']!, style: theme.textTheme.bodySmall),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),

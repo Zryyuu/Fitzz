@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:fitzz/services/storage_service.dart';
+import 'dart:convert';
+import 'package:fitzz/services/firebase_user_service.dart';
 import 'package:fitzz/pages/profile_page.dart';
 
 class ProfileAvatarButton extends StatefulWidget {
@@ -14,7 +13,8 @@ class ProfileAvatarButton extends StatefulWidget {
 }
 
 class _ProfileAvatarButtonState extends State<ProfileAvatarButton> {
-  String? _avatarBase64;
+  String? _avatarUrl;
+  String? _avatarData; // base64 string
   int? _selectedBadge;
   bool _loading = true;
 
@@ -25,30 +25,34 @@ class _ProfileAvatarButtonState extends State<ProfileAvatarButton> {
   }
 
   void _attachListeners() async {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     // Ensure notifiers have initial values
     await storage.preloadNotifiers();
-    _avatarBase64 = storage.avatarBase64Notifier.value;
+    _avatarUrl = storage.avatarUrlNotifier.value;
+    _avatarData = storage.avatarDataNotifier.value;
     _selectedBadge = storage.selectedBadgeLevelNotifier.value;
     if (mounted) setState(() => _loading = false);
 
-    storage.avatarBase64Notifier.addListener(_onNotified);
+    storage.avatarUrlNotifier.addListener(_onNotified);
+    storage.avatarDataNotifier.addListener(_onNotified);
     storage.selectedBadgeLevelNotifier.addListener(_onNotified);
   }
 
   void _onNotified() {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     if (!mounted) return;
     setState(() {
-      _avatarBase64 = storage.avatarBase64Notifier.value;
+      _avatarUrl = storage.avatarUrlNotifier.value;
+      _avatarData = storage.avatarDataNotifier.value;
       _selectedBadge = storage.selectedBadgeLevelNotifier.value;
     });
   }
 
   @override
   void dispose() {
-    final storage = LocalStorageService.instance;
-    storage.avatarBase64Notifier.removeListener(_onNotified);
+    final storage = FirebaseUserService.instance;
+    storage.avatarUrlNotifier.removeListener(_onNotified);
+    storage.avatarDataNotifier.removeListener(_onNotified);
     storage.selectedBadgeLevelNotifier.removeListener(_onNotified);
     super.dispose();
   }
@@ -86,7 +90,19 @@ class _ProfileAvatarButtonState extends State<ProfileAvatarButton> {
       );
     }
 
-    final imageProvider = (_avatarBase64 == null) ? null : MemoryImage(base64Decode(_avatarBase64!));
+    ImageProvider? imageProvider;
+    if (_avatarData != null && _avatarData!.isNotEmpty) {
+      try {
+        final bytes = base64Decode(_avatarData!);
+        imageProvider = MemoryImage(bytes);
+      } catch (_) {
+        imageProvider = null;
+      }
+    } else if (_avatarUrl != null && _avatarUrl!.isNotEmpty) {
+      imageProvider = NetworkImage(_avatarUrl!);
+    } else {
+      imageProvider = null;
+    }
     final ringColor = _ringColorForBadge(_selectedBadge);
 
     return Padding(

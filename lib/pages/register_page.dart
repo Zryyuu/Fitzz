@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:fitzz/services/storage_service.dart';
 import 'package:ionicons/ionicons.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fitzz/services/firebase_user_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -23,22 +25,51 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 400));
       final email = _emailCtrl.text.trim().toLowerCase();
       final pass = _passCtrl.text;
       final name = _nameCtrl.text.trim();
-      final storage = LocalStorageService.instance;
-      final exists = await storage.isUserRegistered(email);
-      if (exists) {
+      // Create user with Firebase Auth
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: pass);
+      // Try update display name on auth profile (best effort)
+      try {
+        await cred.user?.updateDisplayName(name);
+      } catch (_) {}
+      // Create user profile document
+      final uid = cred.user!.uid;
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'email': email,
+          StorageKeys.displayName: name,
+          StorageKeys.totalXp: 0,
+          StorageKeys.totalWorkouts: 0,
+          StorageKeys.bestStrike: 0,
+          StorageKeys.strikeCount: 0,
+          'avatarUrl': null,
+          StorageKeys.badgesEarned: <int>[],
+          StorageKeys.selectedBadgeLevel: null,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } on FirebaseException catch (e) {
+        // Roll back the partially created account to avoid orphaned auth users with no profile
+        try { await cred.user?.delete(); } catch (_) {}
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email sudah terdaftar, silakan login')));
-        Navigator.of(context).pushReplacementNamed('/login');
-        return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan profil: ${e.message ?? e.code}')),
+        );
+        return; // stop flow
       }
-      await storage.registerUser(email: email, password: pass, displayName: name);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registrasi berhasil. Silakan login')));
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/login');
+    } on FirebaseAuthException catch (e) {
+      String msg = 'Registrasi gagal';
+      if (e.code == 'email-already-in-use') msg = 'Email sudah terdaftar';
+      if (e.code == 'weak-password') msg = 'Password terlalu lemah';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
-import 'package:fitzz/services/storage_service.dart';
+import 'package:fitzz/services/firebase_user_service.dart';
 import 'package:fitzz/utils/daily_challenge.dart';
 import 'package:fitzz/utils/motivations.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
@@ -18,7 +18,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late String _todayKey;
   List<String> _challenges = const [];
   List<bool> _done = List<bool>.filled(3, false);
@@ -36,11 +36,12 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final now = DateTime.now();
     _todayKey = DateFormat('yyyy-MM-dd').format(now);
     _init();
     // Listen for global data changes (e.g., after rewind) to refresh UI
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     storage.dataVersionNotifier.addListener(_onDataVersionChanged);
     // Periodically watch for date change (e.g., past midnight) and auto-refresh
     _startDateWatcher();
@@ -48,9 +49,19 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    LocalStorageService.instance.dataVersionNotifier.removeListener(_onDataVersionChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    FirebaseUserService.instance.dataVersionNotifier.removeListener(_onDataVersionChanged);
     _dateWatcher?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Ensure UI syncs immediately after user changes system date/time
+      _checkDateChange();
+      _refresh();
+    }
   }
 
   // Avatar visuals are now centralized via ProfileAvatarButton
@@ -83,7 +94,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _init() async {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
 
     // Load existing flags & stats first
     var challenges = await storage.getChallenges(_todayKey);
@@ -168,7 +179,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _recalculateStatsUpTo(String todayKey) async {
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     // Define a reasonable look-back window (1 year)
     final today = DateTime.parse(todayKey);
     final start = DateTime(today.year - 1, today.month, today.day);
@@ -256,7 +267,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (confirmed != true) return;
 
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
 
     // 1) Mark done and persist
     setState(() => _done[index] = true);
@@ -355,7 +366,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _addExtraChallenge() async {
     if (!_revealed) return;
     if (_extraAdded >= 3) return;
-    final storage = LocalStorageService.instance;
+    final storage = FirebaseUserService.instance;
     final levelNow = _levelFromXp(_totalXp);
     // generate until non-duplicate
     final pool = <String>{..._challenges};
@@ -380,7 +391,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _revealToday() async {
-    await LocalStorageService.instance.setChallengesRevealed(_todayKey, true);
+    await FirebaseUserService.instance.setChallengesRevealed(_todayKey, true);
     if (!mounted) return;
     setState(() => _revealed = true);
   }
@@ -444,7 +455,7 @@ class _HomePageState extends State<HomePage> {
             ProfileAvatarButton(radius: 18),
           ],
         ),
-        bottomNavigationBar: const AppBottomNav(currentIndex: 0),
+        bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 0) : null,
         body: const SizedBox.expand(),
       );
     }

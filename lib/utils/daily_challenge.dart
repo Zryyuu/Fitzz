@@ -22,7 +22,7 @@ class DailyChallengeGenerator {
     ChallengeType('Push-up', 10, 3),
     ChallengeType('Sit-up', 15, 3),
     ChallengeType('Squat', 15, 3),
-    ChallengeType('Lunge / kaki', 10, 2),
+    ChallengeType('Lunge', 10, 2),
     ChallengeType('Burpee', 5, 2),
     ChallengeType('Dip (kursi)', 8, 2),
     ChallengeType('Jumping Jack', 30, 10, isDuration: true),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
-import 'package:fitzz/services/storage_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -25,8 +25,8 @@ class _SplashPageState extends State<SplashPage> {
     final isCurrent = ModalRoute.of(context)?.isCurrent == true;
     if (!isCurrent || _navigated) return;
 
-    final loggedIn = await LocalStorageService.instance.isLoggedIn();
-    final activeEmail = await LocalStorageService.instance.getActiveEmail();
+    final loggedIn = FirebaseAuth.instance.currentUser != null;
+    final activeEmail = FirebaseAuth.instance.currentUser?.email;
     if (!mounted) return;
     _navigated = true;
     if (loggedIn && (activeEmail != null && activeEmail.isNotEmpty)) {

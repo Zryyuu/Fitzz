@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "86359871031",
+    "project_id": "fitzz-637e0",
+    "storage_bucket": "fitzz-637e0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:86359871031:android:363414f76acf870ccfb9b2",
+        "android_client_info": {
+          "package_name": "com.Zry.Fitzz"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBavddeEvBwZ5Hh8TVRwvYtzgnEq2ClG7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:86359871031:android:7c969b27e464b56ecfb9b2",
+        "android_client_info": {
+          "package_name": "com.example.fitzz"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBavddeEvBwZ5Hh8TVRwvYtzgnEq2ClG7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
