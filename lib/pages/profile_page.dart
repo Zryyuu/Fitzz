@@ -4,6 +4,7 @@ import 'package:fitzz/services/firebase_user_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
+// Top header is not used on Profile per design
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -19,28 +20,25 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   String? _avatarUrl;
   String? _avatarData; // base64 avatar (tanpa Storage)
-  VoidCallback? _avatarUrlListener;
-  VoidCallback? _avatarDataListener;
+  // Semua level badge yang tersedia
+  static const List<int> _allBadgeLevels = <int>[10, 25, 45, 65, 75, 100];
 
   @override
   void initState() {
     super.initState();
     _load();
-    _attachLiveListeners();
   }
 
   ImageProvider? _buildImageProvider({bool preview = false, String? tempData, bool useBase64 = false}) {
-    // Preview mode: when useBase64 with tempData, do NOT fallback to stored avatar when tempData is null/empty.
-    if (preview && useBase64) {
-      if (tempData != null && tempData.isNotEmpty) {
-        try { return MemoryImage(base64Decode(tempData)); } catch (_) { return null; }
-      }
-      return null; // explicit no fallback in preview to avoid showing stale image after delete
+    // If tempData provided with useBase64, interpret as base64 (for dialog preview)
+    if (useBase64 && tempData != null && tempData.isNotEmpty) {
+      try { return MemoryImage(base64Decode(tempData)); } catch (_) { return null; }
     }
-    // Non-preview: Prefer base64 avatarData, then fallback to URL.
+    // Prefer base64 avatarData
     if (_avatarData != null && _avatarData!.isNotEmpty) {
       try { return MemoryImage(base64Decode(_avatarData!)); } catch (_) { return null; }
     }
+    // Fallback to URL if exists (ke depan bisa dihapus bila full base64)
     if (_avatarUrl != null && _avatarUrl!.isNotEmpty) {
       return NetworkImage(_avatarUrl!);
     }
@@ -90,24 +88,15 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _attachLiveListeners() async {
-    final s = FirebaseUserService.instance;
-    await s.preloadNotifiers();
-    _avatarUrlListener = () { if (mounted) setState(() => _avatarUrl = s.avatarUrlNotifier.value); };
-    _avatarDataListener = () { if (mounted) setState(() => _avatarData = s.avatarDataNotifier.value); };
-    s.avatarUrlNotifier.addListener(_avatarUrlListener!);
-    s.avatarDataNotifier.addListener(_avatarDataListener!);
-  }
-
   Future<void> _showEditDialog() async {
     final nameCtrl = TextEditingController(text: _displayName ?? '');
-    String? tempAvatarData = _avatarData;
+    String? tempAvatarUrl = _avatarUrl;
     int? tempBadge = _selectedBadge;
     await showDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setLocal) {
-          final ImageProvider? imageProvider = _buildImageProvider(preview: true, tempData: tempAvatarData, useBase64: true);
+          final ImageProvider? imageProvider = _buildImageProvider(tempData: tempAvatarUrl, useBase64: true);
           return AlertDialog(
             title: const Text('Edit Profil'),
             content: SingleChildScrollView(
@@ -149,15 +138,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               }
                               final bytes = await f.readAsBytes();
                               final b64 = base64Encode(bytes);
-                              setLocal(() => tempAvatarData = b64);
+                              // Update sementara di dialog
+                              setLocal(() => tempAvatarUrl = b64);
                               // Simpan ke Firestore sebagai base64 dan notifikasi UI
                               await FirebaseUserService.instance.setAvatarData(b64);
-                              if (mounted) {
-                                setState(() {
-                                  _avatarData = b64;
-                                  _avatarUrl = null;
-                                });
-                              }
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto profil diperbarui')));
                             } catch (e) {
@@ -184,15 +168,9 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             );
                             if (ok == true) {
-                              setLocal(() => tempAvatarData = null);
+                              setLocal(() => tempAvatarUrl = null);
                               await FirebaseUserService.instance.setAvatarData(null);
                               await FirebaseUserService.instance.setAvatarUrl(null);
-                              if (mounted) {
-                                setState(() {
-                                  _avatarData = null;
-                                  _avatarUrl = null;
-                                });
-                              }
                             }
                           },
                           icon: const Icon(Icons.delete_outline),
@@ -217,9 +195,11 @@ class _ProfilePageState extends State<ProfilePage> {
               ElevatedButton(
                 onPressed: () async {
                   await FirebaseUserService.instance.setDisplayName(nameCtrl.text.trim());
+                  await FirebaseUserService.instance.setAvatarUrl(tempAvatarUrl);
                   if (!mounted) return;
                   setState(() {
                     _displayName = nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim();
+                    _avatarUrl = tempAvatarUrl;
                   });
                   if (!ctx.mounted) return;
                   Navigator.pop(ctx);
@@ -341,6 +321,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _selectBadge(int? level) async {
+    // Cegah memilih badge yang masih terkunci
+    if (level != null && !_earnedBadges.contains(level)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Badge Lv$level masih terkunci. Selesaikan syaratnya dulu.')),
+        );
+      }
+      return;
+    }
     await FirebaseUserService.instance.setSelectedBadgeLevel(level);
     if (!mounted) return;
     setState(() => _selectedBadge = level);
@@ -368,6 +357,14 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  bool _isUnlocked(int level) => _earnedBadges.contains(level);
+
+  String _requirementText(int level) {
+    // Kamu bisa menyesuaikan syarat berikut sesuai logika gamifikasi di app.
+    // Untuk saat ini tampilkan syarat generik.
+    return 'Capai Badge Level $level untuk membuka';
+  }
+
   Widget _avatarPreview() {
     final ImageProvider? imageProvider = _buildImageProvider();
     return Container(
@@ -392,136 +389,140 @@ class _ProfilePageState extends State<ProfilePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
+      backgroundColor: const Color(0xFFF0F0F0),
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        centerTitle: true,
+        toolbarHeight: 64,
         title: const Text('Profile'),
-        leading: BackButton(
-          onPressed: () {
-            final nav = Navigator.of(context);
-            if (nav.canPop()) {
-              nav.pop();
-            } else {
-              nav.pushReplacementNamed('/home');
-            }
-          },
-        ),
       ),
       // Drawer removed; profile accessible via AppBar avatar.
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
-            ),
-            child: InkWell(
-              onTap: _showPreviewDialog,
-              borderRadius: BorderRadius.circular(16),
-              child: Row(
-                children: [
-                  _avatarPreview(),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_displayName?.isNotEmpty == true ? _displayName! : 'Guest User',
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
+      body: Container(
+        color: const Color(0xFFF0F0F0),
+        width: double.infinity,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Edge-to-edge layout: horizontal padding handled at ListView level
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(0, 32, 0, 16),
+              children: [
+                // Top profile card with rounded corners
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.all(Radius.circular(20)),
                   ),
-                ],
-              ),
-            ),
-          ),
-          // Hapus kartu 'Ganti Foto Profil' karena edit dipindah ke popup
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Keamanan', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.lock_outline),
-                  title: const Text('Ganti Password'),
-                  onTap: _changePassword,
+                  child: Row(
+                    children: [
+                      InkWell(onTap: _showPreviewDialog, child: _avatarPreview()),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_displayName?.isNotEmpty == true ? _displayName! : 'Guest User',
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Border Badge Avatar', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('None'),
-                      selected: _selectedBadge == null,
-                      onSelected: (_) => _selectBadge(null),
-                      backgroundColor: Colors.white,
-                      selectedColor: Colors.white,
-                      labelStyle: const TextStyle(color: Colors.black),
-                      shape: const StadiumBorder(side: BorderSide(color: Colors.black)),
-                    ),
-                    if (_earnedBadges.isNotEmpty)
-                      ..._earnedBadges.map((b) => ChoiceChip(
-                            label: Text('Lv$b'),
-                            selected: _selectedBadge == b,
-                            onSelected: (_) => _selectBadge(b),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Keamanan', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.lock_outline),
+                        title: const Text('Ganti Password'),
+                        onTap: _changePassword,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Border Badge Avatar', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('None'),
+                            selected: _selectedBadge == null,
+                            onSelected: (_) => _selectBadge(null),
                             backgroundColor: Colors.white,
                             selectedColor: Colors.white,
                             labelStyle: const TextStyle(color: Colors.black),
                             shape: const StadiumBorder(side: BorderSide(color: Colors.black)),
-                          )),
-                  ],
+                          ),
+                          // Tampilkan semua badge. Yang belum didapat ditandai terkunci.
+                          ..._allBadgeLevels.map((b) {
+                            final bool unlocked = _isUnlocked(b);
+                            final bool selected = _selectedBadge == b;
+                            return ChoiceChip(
+                              avatar: unlocked ? null : const Icon(Icons.lock, size: 16),
+                              label: Text('Lv$b'),
+                              selected: selected,
+                              onSelected: unlocked ? (_) => _selectBadge(b) : (_) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Lv$b terkunci. ${_requirementText(b)}')),
+                                );
+                              },
+                              backgroundColor: unlocked ? Colors.white : Colors.grey.shade200,
+                              selectedColor: Colors.white,
+                              labelStyle: TextStyle(color: unlocked ? Colors.black : Colors.black54),
+                              shape: StadiumBorder(side: BorderSide(color: unlocked ? Colors.black : Colors.grey.shade400)),
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _earnedBadges.isEmpty
+                            ? 'Kamu belum memiliki badge. Selesaikan misi untuk membuka.'
+                            : 'Pilih level badge untuk menjadi border avatar. Badge yang terkunci ditandai ikon gembok.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                if (_earnedBadges.isEmpty)
-                  Text('Kamu belum memiliki badge.', style: theme.textTheme.bodySmall)
-                else
-                  Text('Pilih level badge untuk menjadi border avatar.', style: theme.textTheme.bodySmall),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Lainnya', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.logout),
+                        title: const Text('Logout'),
+                        onTap: _confirmLogout,
+                      )
+                    ],
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Lainnya', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Logout'),
-                  onTap: _confirmLogout,
-                )
-              ],
-            ),
-          ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

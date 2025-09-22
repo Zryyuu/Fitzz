@@ -4,7 +4,7 @@ import 'package:fitzz/pages/tab_shell.dart';
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({super.key, required this.currentIndex});
 
-  final int currentIndex; // 0: Home, 1: Progress, 2: Achievements, 3: Library
+  final int currentIndex; // 0: Home, 1: Progress, 2: Achievements, 3: Library, 4: Profile
 
   void _go(BuildContext context, int index) {
     if (index == currentIndex) return;
@@ -32,6 +32,7 @@ class AppBottomNav extends StatelessWidget {
         BottomNavigationBarItem(icon: Icon(Icons.show_chart_outlined), label: 'Progress'),
         BottomNavigationBarItem(icon: Icon(Icons.emoji_events_outlined), label: 'Achievements'),
         BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Library'),
+        BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
       ],
     );
   }

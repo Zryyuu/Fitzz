@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:fitzz/widgets/profile_avatar_button.dart';
+import 'package:fitzz/widgets/top_status_header.dart';
 import 'package:fitzz/services/firebase_user_service.dart';
 
 class AchievementsPage extends StatefulWidget {
@@ -196,73 +197,112 @@ class _AchievementsPageState extends State<AchievementsPage> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF0F0F0),
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('Achievements'),
-        actions: const [
-          ProfileAvatarButton(radius: 18),
-        ],
+        elevation: 0,
+        toolbarHeight: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: TopStatusHeader(totalXp: _totalXp, strike: _strike),
+            ),
+          ),
+        ),
       ),
       // Drawer removed: using bottom navigation
       bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 2) : null,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: achievements.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (_, i) {
-              final a = achievements[i];
-              final unlocked = a['unlocked'] == true;
-              return Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: Container(
+        color: const Color(0xFFF0F0F0),
+        width: double.infinity,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Full-width bar behind rounded top of the white content
+            Positioned(top: 0, left: 0, right: 0, child: Container(height: 48, color: Colors.black)),
+            // Content list sits below; header will be drawn on top to avoid bleed-through
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isWide = constraints.maxWidth >= 600;
+                const double stickyHeaderHeight = 68; // approx height of sticky header
+                return ListView(
+                  padding: const EdgeInsets.only(bottom: 16).copyWith(top: stickyHeaderHeight + 16),
                   children: [
-                    Icon(
-                      unlocked ? Icons.emoji_events : Icons.emoji_events_outlined,
-                      color: unlocked ? Colors.amber : Colors.grey,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            a['title'] as String,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: unlocked ? Colors.black : Colors.black87,
-                            ),
+                    const SizedBox(height: 0),
+                    ...List.generate(achievements.length, (i) {
+                      final a = achievements[i];
+                      final unlocked = a['unlocked'] == true;
+                      return Padding(
+                        padding: EdgeInsets.fromLTRB(isWide ? 0 : 16, 0, isWide ? 0 : 16, 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                unlocked ? Icons.emoji_events : Icons.emoji_events_outlined,
+                                color: unlocked ? Colors.amber : Colors.grey,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      a['title'] as String,
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: unlocked ? Colors.black : Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      a['desc'] as String,
+                                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54),
+                                    ),
+                                    if (a['progress'] != null) ...[
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Icon(unlocked ? Icons.check_circle : Icons.lock_outline, size: 16, color: unlocked ? Colors.green : Colors.grey),
+                                          const SizedBox(width: 6),
+                                          Text(a['progress'] as String, style: theme.textTheme.bodySmall),
+                                        ],
+                                      ),
+                                    ]
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            a['desc'] as String,
-                            style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54),
-                          ),
-                          if (a['progress'] != null) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(unlocked ? Icons.check_circle : Icons.lock_outline, size: 16, color: unlocked ? Colors.green : Colors.grey),
-                                const SizedBox(width: 6),
-                                Text(a['progress'] as String, style: theme.textTheme.bodySmall),
-                              ],
-                            ),
-                          ]
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    })
                   ],
+                );
+              },
+            ),
+            // Sticky header card with rounded top corners (painted on top)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.all(Radius.circular(16)),
                 ),
-              );
-            },
-          ),
+                child: Text('Pencapaian', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
         ),
       ),
     );

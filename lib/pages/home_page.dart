@@ -7,7 +7,8 @@ import 'package:fitzz/utils/motivations.dart';
 // import 'package:fitzz/widgets/app_drawer.dart';
 import 'package:fitzz/widgets/bottom_nav.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:fitzz/widgets/profile_avatar_button.dart';
+// import 'package:fitzz/widgets/profile_avatar_button.dart';
+import 'package:fitzz/widgets/top_status_header.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.withBottomNav = true});
@@ -279,6 +280,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final gained = _xpForChallenge(_challenges[index]);
     totalXp += gained;
     await storage.setTotalXp(totalXp);
+    // Notify other tabs (headers) to refresh totals
+    storage.bumpDataVersion();
 
     // 3) Level up popup if any
     final newLevel = _levelFromXp(totalXp);
@@ -352,6 +355,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _totalXp = totalXp; // reflect XP gain
         _totalWorkouts = totalWorkouts;
       });
+      // Notify other tabs (headers) to refresh totals/strike
+      storage.bumpDataVersion();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('🔥 Strike $_strike hari!'), behavior: SnackBarBehavior.floating),
       );
@@ -360,6 +365,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _totalXp = totalXp; // reflect XP gain
       });
+      // Notify other tabs (headers) to refresh totals
+      storage.bumpDataVersion();
     }
   }
 
@@ -428,8 +435,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return xp;
   }
 
-  int _nextLevelTotalXp(int level) => _baseXpForLevel(level + 1);
-
   int _levelFromXp(int xp) {
     int level = 1;
     int acc = 0;
@@ -449,11 +454,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         appBar: AppBar(
           automaticallyImplyLeading: false,
           backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          title: const Text('Home'),
-          actions: const [
-            ProfileAvatarButton(radius: 18),
-          ],
+          elevation: 0,
+          toolbarHeight: 0,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(96),
+            child: SafeArea(
+              top: false,
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: TopStatusHeader(totalXp: _totalXp, strike: _strike),
+              ),
+            ),
+          ),
         ),
         bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 0) : null,
         body: const SizedBox.expand(),
@@ -465,10 +478,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Removed loading spinner; render immediately
 
     final level = _levelFromXp(_totalXp);
-    final baseXp = _baseXpForLevel(level);
-    final nextXp = _nextLevelTotalXp(level);
-    final xpWithinLevel = (_totalXp - baseXp).clamp(0, _xpNeededForLevel(level));
-    final xpProgress = (xpWithinLevel / (nextXp - baseXp)).clamp(0.0, 1.0);
     final motivation = Motivations.forContext(
       _todayKey,
       level: level,
@@ -482,131 +491,122 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('Home'),
-        actions: const [
-          ProfileAvatarButton(radius: 18),
-        ],
+        elevation: 0,
+        toolbarHeight: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: TopStatusHeader(totalXp: _totalXp, strike: _strike),
+            ),
+          ),
+        ),
       ),
       // Drawer removed: bottom navigation is used instead
       bottomNavigationBar: widget.withBottomNav ? const AppBottomNav(currentIndex: 0) : null,
       body: Container(
         color: const Color(0xFFF0F0F0),
         width: double.infinity,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            _headerSection(theme, xpProgress, level, xpWithinLevel, nextXp - baseXp),
-            const SizedBox(height: 8),
-            _quickStats(theme),
-            const SizedBox(height: 8),
-            _motivationCard(theme, motivation),
-            const SizedBox(height: 8),
-            _sectionTitle(theme, 'Challenge WorkOut Harian'),
-            Expanded(
-              child: NotificationListener<OverscrollIndicatorNotification>(
-                onNotification: (o) { o.disallowIndicator(); return true; },
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: _revealed
-                      ? ListView.separated(
-                          itemCount: _challenges.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (context, i) => _challengeItem(i),
-                        )
-                      : ListView(
-                          children: [
-                            _revealPlaceholder(theme, progress, completedDaily, 3),
-                          ],
-                        ),
-                ),
-              ),
+            // Full-width responsive black bar behind the rounded top of quick stats
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(height: 40, color: Colors.black),
             ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: SizedBox(
-                  height: 52,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: const BorderSide(color: Colors.black),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: (_revealed && completedDaily == 3 && _extraAdded < 3) ? _addExtraChallenge : null,
-                          child: Text(_extraAdded < 3 ? 'Tambah Challenge (${3 - _extraAdded} sisa)' : 'Challenge tambahan habis'),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isWide = constraints.maxWidth >= 600; // tablet/desktop wide
+                Widget content = Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _quickStats(theme),
+                    const SizedBox(height: 8),
+                    _motivationCard(theme, motivation),
+                    const SizedBox(height: 8),
+                    _sectionTitle(theme, 'Challenge WorkOut Harian', wide: isWide),
+                    Expanded(
+                      child: NotificationListener<OverscrollIndicatorNotification>(
+                        onNotification: (o) { o.disallowIndicator(); return true; },
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(isWide ? 0 : 16, 16, isWide ? 0 : 16, 16),
+                          child: _revealed
+                              ? ListView.separated(
+                                itemCount: _challenges.length,
+                                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                itemBuilder: (context, i) => _challengeItem(i),
+                              )
+                              : ListView(
+                                children: [
+                                  _revealPlaceholder(theme, progress, completedDaily, 3),
+                                ],
+                              ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          ],
+                    ),
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(isWide ? 0 : 16, 0, isWide ? 0 : 16, 16),
+                        child: SizedBox(
+                          height: 52,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.black,
+                                    side: const BorderSide(color: Colors.black),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  onPressed: (_revealed && completedDaily == 3 && _extraAdded < 3) ? _addExtraChallenge : null,
+                                  child: Text(_extraAdded < 3 ? 'Tambah Challenge (${3 - _extraAdded} sisa)' : 'Challenge tambahan habis'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+                if (isWide) {
+                  // Desktop/web wide: content stretches full width
+                  return content;
+                } else {
+                  // Centered and constrained on small screens
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: content,
+                    ),
+                  );
+                }
+              },
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _headerSection(ThemeData theme, double xpProgress, int level, int xpWithinLevel, int levelSpan) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.white, Color(0xFFF7F7F7)],
-        ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Level $level', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('XP: $xpWithinLevel/$levelSpan', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[700])),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              minHeight: 10,
-              value: xpProgress,
-              backgroundColor: const Color(0xFFE6E6E6),
-              color: const Color(0xFF111111),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Text('🔥 ', style: TextStyle(fontSize: 20)),
-              Text('Strike $_strike hari!', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Badges are now represented as the profile avatar border (ring) on the top-right.
-        ],
-      ),
-    );
-  }
+  // Old headerSection removed; unified header is now TopStatusHeader
 
   Widget _quickStats(ThemeData theme) {
     return Container(
+      decoration: const BoxDecoration(
       color: Colors.white,
+      borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -646,9 +646,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _sectionTitle(ThemeData theme, String title) {
+  Widget _sectionTitle(ThemeData theme, String title, {bool wide = false}) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: EdgeInsets.fromLTRB(wide ? 0 : 16, 12, wide ? 0 : 16, 0),
       child: Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
     );
   }

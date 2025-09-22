@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:fitzz/services/firebase_user_service.dart';
-import 'package:fitzz/pages/profile_page.dart';
+import 'package:fitzz/pages/tab_shell.dart';
 
 class ProfileAvatarButton extends StatefulWidget {
   const ProfileAvatarButton({super.key, this.radius = 18});
@@ -109,9 +109,9 @@ class _ProfileAvatarButtonState extends State<ProfileAvatarButton> {
       padding: const EdgeInsets.only(right: 8),
       child: InkWell(
         onTap: () {
-          Navigator.of(context).push(
+          Navigator.of(context).pushReplacement(
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => const ProfilePage(),
+              pageBuilder: (context, animation, secondaryAnimation) => const TabShell(initialIndex: 4),
               transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
               transitionDuration: Duration.zero,
               reverseTransitionDuration: Duration.zero,

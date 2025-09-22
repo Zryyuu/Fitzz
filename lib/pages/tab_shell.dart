@@ -3,6 +3,7 @@ import 'package:fitzz/pages/home_page.dart';
 import 'package:fitzz/pages/progress_page.dart';
 import 'package:fitzz/pages/achievements_page.dart';
 import 'package:fitzz/pages/library_page.dart';
+import 'package:fitzz/pages/profile_page.dart';
 // AppBars are managed by each page; TabShell only controls bottom navigation and keeps pages alive
 
 class TabShell extends StatefulWidget {
@@ -25,12 +26,13 @@ class _TabShellState extends State<TabShell> {
     ProgressPage(key: _progressKey, withBottomNav: false),
     AchievementsPage(key: _achievementsKey, withBottomNav: false),
     const LibraryPage(withBottomNav: false),
+    const ProfilePage(),
   ];
 
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex.clamp(0, 3);
+    _index = widget.initialIndex.clamp(0, 4);
     // If entering directly to a tab that needs live data, refresh once UI is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_index == 1) {
@@ -82,6 +84,7 @@ class _TabShellState extends State<TabShell> {
           BottomNavigationBarItem(icon: Icon(Icons.show_chart_outlined), label: 'Progress'),
           BottomNavigationBarItem(icon: Icon(Icons.emoji_events_outlined), label: 'Achievements'),
           BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Library'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
       ),
     );
